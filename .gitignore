@@ -1,0 +1,32 @@
+# Compiled Object files, Signatures, Tags
+*.o
+*.a
+*.so
+
+# Executables
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, consumed by `go tool cover`
+*.out
+*.prof
+
+# IDEs and Editors
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Architecture independent distribution files
+/bin/
+/pkg/
+/out/
