@@ -17,6 +17,9 @@ of disk?"* instead of SSH-ing in to run `df -h`.
 | `system_disk_usage` | `include_all` (optional, default `false`) | disk usage per mountpoint, fullest first, plus inode usage |
 | `system_service_status` | `units` (optional), `include_all` (optional, default `false`) | systemd service state — failed, stuck starting, or crash-looping units, worst first |
 | `docker_container_status` | `names` (optional), `include_all` (optional, default `false`) | Docker container state — OOM kills, crash loops, failing healthchecks, worst first |
+| `docker_container_logs` | `container`, `tail` / `since_seconds` / `timestamps` (optional) | what a container wrote to stdout and stderr — the "why" behind any finding above |
+| `docker_container_exec` | `container`, `command`, `timeout_seconds` (optional) | runs a command in an allowlisted container — **opt-in, and asks you before every run** (see below) |
+| `docker_container_restart` | `container`, `stop_timeout_seconds` (optional) | restarts an allowlisted container and reports whether it came back — **opt-in, and asks you before every run** |
 
 Every tool returns both a compact text rendering and structured JSON, so a client can use the
 table or the raw numbers. Sizes in the JSON are plain byte counts on `*_bytes` fields; the
@@ -36,11 +39,69 @@ Details the tools handle that a plain `df -h` / `free -h` / `systemctl status` w
 - **Containers killed for their memory limit.** `docker ps` shows a container that exceeded its
   limit as `Exited (137)`, which reads like an application error. `docker_container_status`
   reports the OOM flag directly, alongside healthcheck results and restart counts.
+- **Logs that exist nowhere on disk.** Most images write to stdout, which the daemon captures —
+  so there is no log file inside the container, and looking for one with a shell finds nothing.
+  `docker_container_logs` reads them from the daemon, which is the only place they exist.
 
-## What it can and cannot do
+## Acting on containers (opt-in)
 
-**Every tool is read-only.** Nothing here starts, stops, restarts, writes, or deletes
-anything — the server observes and reports.
+Two tools can change something, and both are **off unless you turn them on**:
+
+- `docker_container_exec` — runs a command inside a container, returning stdout, stderr and
+  exit code.
+- `docker_container_restart` — restarts a container, then waits and reports whether it
+  actually came back. A container that crashes on boot returns to `exited` within seconds, and
+  that outcome is reported rather than assumed.
+
+Each is guarded by three independent layers.
+
+**1. An allowlist you set, naming the containers it may touch.** The two tools have
+**separate** lists, because debugging inside a service and taking it offline are different
+grants. Each holds a comma-separated list of container names (the `NAMES` column of
+`docker ps` — not the image, not the id):
+
+```json
+{
+  "mcpServers": {
+    "homelab": {
+      "command": "/absolute/path/to/Homelab-MCP/bin/server",
+      "env": {
+        "HOMELAB_MCP_EXEC_ALLOW_CONTAINER_NAMES": "jellyfin,sonarr",
+        "HOMELAB_MCP_RESTART_ALLOW_CONTAINER_NAMES": "jellyfin"
+      }
+    }
+  }
+}
+```
+
+A tool whose variable is unset is **not registered at all** — it does not appear in
+`tools/list`, so the model cannot call it. With neither set, the server is entirely read-only.
+Nothing the model or the client does can widen these lists.
+
+**2. Your approval, for every single command.** The server requests confirmation through the
+protocol itself (SEP-2322 input requests, which degrade to elicitation on older clients) rather
+than relying on your client's own prompting — so approving the tool once does not turn it into
+a blank cheque. You see the command verbatim before deciding. **If your client cannot ask you,
+the command does not run**: this fails closed.
+
+**3. A fingerprint tying the approval to the command.** The approved container and argument
+vector are hashed into the request state and re-checked before execution, so what runs is
+provably what was shown.
+
+Two further properties of `exec`: the command is an **argument vector, not a shell line** — it
+is executed directly, so pipes and redirection do nothing unless you explicitly ask for a shell
+with `["sh","-c","…"]`, which the confirmation then flags. And output is capped, so a command
+that dumps a log file cannot flood the model's context.
+
+A note on restart timing: a container that ignores `SIGTERM` is killed only after Docker's
+stop timeout (10s by default — lower it with `stop_timeout_seconds`), and the tool then watches
+it for a few seconds before reporting. A healthy restart typically takes ten to fifteen seconds
+end to end; that is the container's shutdown, not overhead.
+
+## What the rest can and cannot do
+
+**Every other tool is read-only.** Nothing else starts, stops, restarts, writes, or deletes
+anything — they observe and report.
 
 Most data comes from reading the kernel through [gopsutil](https://github.com/shirou/gopsutil).
 Two tools reach further, and each is bounded:

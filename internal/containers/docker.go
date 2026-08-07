@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -279,6 +280,7 @@ type inspectResult struct {
 	} `json:"State"`
 	Config struct {
 		Image string `json:"Image"`
+		Tty   bool   `json:"Tty"`
 	} `json:"Config"`
 	HostConfig struct {
 		Memory        uint64 `json:"Memory"`
@@ -353,10 +355,42 @@ func get(ctx context.Context, client *http.Client, path string, out any) error {
 	return json.NewDecoder(resp.Body).Decode(out)
 }
 
+func getStream(ctx context.Context, client *http.Client, path string) (io.ReadCloser, error) {
+	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://docker"+path, nil)
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("%w: %v", ErrUnavailable, err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
+		cancel()
+		return nil, fmt.Errorf("docker API %s returned %s", path, resp.Status)
+	}
+
+	return cancelOnClose{ReadCloser: resp.Body, cancel: cancel}, nil
+}
+
+type cancelOnClose struct {
+	io.ReadCloser
+	cancel context.CancelFunc
+}
+
+func (c cancelOnClose) Close() error {
+	err := c.ReadCloser.Close()
+	c.cancel()
+	return err
+}
+
 func listContainers(ctx context.Context, client *http.Client) ([]summary, error) {
 	var out []summary
-	// Unversioned path: the daemon serves its own latest API version, so this
-	// works across daemon versions without pinning one.
 	if err := get(ctx, client, "/containers/json?all=true", &out); err != nil {
 		return nil, err
 	}
