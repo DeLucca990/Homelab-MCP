@@ -7,24 +7,18 @@ import (
 	"github.com/shirou/gopsutil/v4/mem"
 )
 
-type Bytes struct {
-	Bytes uint64 `json:"bytes"`
-	Human string `json:"human"`
-}
-
-func newBytes(b uint64) Bytes {
-	return Bytes{Bytes: b, Human: humanBytes(b)}
-}
-
+// Sizes are raw byte counts. The `_bytes` suffix carries the unit so the
+// numbers need no human-readable companion field — the tool renders that
+// once, in text, instead of duplicating every value in the JSON.
 type MemoryStats struct {
-	Total            Bytes   `json:"total"`
-	Available        Bytes   `json:"available" jsonschema:"memory a new application could allocate without swapping — this is the number that indicates memory pressure"`
-	Used             Bytes   `json:"used" jsonschema:"total minus available; excludes reclaimable cache"`
-	Free             Bytes   `json:"free" jsonschema:"untouched RAM; usually low even on healthy servers, since the kernel uses the leftovers as cache"`
-	Cached           Bytes   `json:"cached" jsonschema:"page cache, instantly reclaimable on demand"`
-	Buffers          Bytes   `json:"buffers"`
-	Shared           Bytes   `json:"shared"`
-	BuffCache        Bytes   `json:"buff_cache" jsonschema:"buffers + cached + reclaimable slab; this is free's buff/cache column"`
+	TotalBytes       uint64  `json:"total_bytes"`
+	AvailableBytes   uint64  `json:"available_bytes" jsonschema:"memory a new application could allocate without swapping — this is the number that indicates memory pressure"`
+	UsedBytes        uint64  `json:"used_bytes" jsonschema:"total minus available; excludes reclaimable cache"`
+	FreeBytes        uint64  `json:"free_bytes" jsonschema:"untouched RAM; usually low even on healthy servers, since the kernel uses the leftovers as cache"`
+	CachedBytes      uint64  `json:"cached_bytes" jsonschema:"page cache, instantly reclaimable on demand"`
+	BuffersBytes     uint64  `json:"buffers_bytes"`
+	SharedBytes      uint64  `json:"shared_bytes"`
+	BuffCacheBytes   uint64  `json:"buff_cache_bytes" jsonschema:"buffers + cached + reclaimable slab; this is free's buff/cache column"`
 	UsedPercent      float64 `json:"used_percent"`
 	AvailablePercent float64 `json:"available_percent"`
 
@@ -37,9 +31,9 @@ type MemoryStats struct {
 
 type SwapStats struct {
 	Configured  bool    `json:"configured"`
-	Total       Bytes   `json:"total"`
-	Used        Bytes   `json:"used"`
-	Free        Bytes   `json:"free"`
+	TotalBytes  uint64  `json:"total_bytes"`
+	UsedBytes   uint64  `json:"used_bytes"`
+	FreeBytes   uint64  `json:"free_bytes"`
 	UsedPercent float64 `json:"used_percent"`
 }
 
@@ -50,13 +44,13 @@ func GetMemoryStats(ctx context.Context) (MemoryStats, error) {
 	}
 
 	stats := MemoryStats{
-		Total:     newBytes(vm.Total),
-		Available: newBytes(vm.Available),
-		Free:      newBytes(vm.Free),
-		Cached:    newBytes(vm.Cached),
-		Buffers:   newBytes(vm.Buffers),
-		Shared:    newBytes(vm.Shared),
-		BuffCache: newBytes(vm.Buffers + vm.Cached + vm.Sreclaimable),
+		TotalBytes:     vm.Total,
+		AvailableBytes: vm.Available,
+		FreeBytes:      vm.Free,
+		CachedBytes:    vm.Cached,
+		BuffersBytes:   vm.Buffers,
+		SharedBytes:    vm.Shared,
+		BuffCacheBytes: vm.Buffers + vm.Cached + vm.Sreclaimable,
 	}
 
 	// We compute the percentages ourselves instead of using vm.UsedPercent:
@@ -64,7 +58,7 @@ func GetMemoryStats(ctx context.Context) (MemoryStats, error) {
 	// here we want the guarantee that "used" means "total minus available".
 	if vm.Total > 0 {
 		used := vm.Total - vm.Available
-		stats.Used = newBytes(used)
+		stats.UsedBytes = used
 		stats.UsedPercent = round2(float64(used) / float64(vm.Total) * 100)
 		stats.AvailablePercent = round2(float64(vm.Available) / float64(vm.Total) * 100)
 	}
@@ -82,9 +76,9 @@ func GetMemoryStats(ctx context.Context) (MemoryStats, error) {
 	default:
 		stats.Swap = SwapStats{
 			Configured:  true,
-			Total:       newBytes(sw.Total),
-			Used:        newBytes(sw.Used),
-			Free:        newBytes(sw.Free),
+			TotalBytes:  sw.Total,
+			UsedBytes:   sw.Used,
+			FreeBytes:   sw.Free,
 			UsedPercent: round2(sw.UsedPercent),
 		}
 	}

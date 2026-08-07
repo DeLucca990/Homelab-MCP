@@ -30,10 +30,6 @@ func handleDiskStats(
 	}, stats, nil
 }
 
-// Above this inode percentage we warn explicitly — it is the kind of
-// problem that `df -h` hides completely.
-const inodeWarnThreshold = 80.0
-
 func renderDiskTable(stats system.DiskStats) string {
 	if len(stats.Filesystems) == 0 {
 		return "no filesystem found\n"
@@ -52,9 +48,9 @@ func renderDiskTable(stats system.DiskStats) string {
 		}
 		rows = append(rows, row{
 			fs:    f.Device,
-			size:  system.CompactBytes(f.Total.Bytes),
-			used:  system.CompactBytes(f.Used.Bytes),
-			avail: system.CompactBytes(f.Free.Bytes),
+			size:  system.CompactBytes(f.TotalBytes),
+			used:  system.CompactBytes(f.UsedBytes),
+			avail: system.CompactBytes(f.FreeBytes),
 			pct:   fmt.Sprintf("%.0f%%", f.UsedPercent),
 			mount: f.Mountpoint,
 		})
@@ -93,15 +89,8 @@ func renderDiskTable(stats system.DiskStats) string {
 		write(r)
 	}
 
-	// Footer: what df -h would not tell you.
-	for _, f := range stats.Filesystems {
-		if f.InodesUsedPercent >= inodeWarnThreshold {
-			fmt.Fprintf(&b, "\nwarning: %s is at %.0f%% inode usage "+
-				"(%d of %d) — it can fail with \"no space left on device\" "+
-				"even with free space\n",
-				f.Mountpoint, f.InodesUsedPercent, f.InodesUsed, f.InodesTotal)
-		}
-	}
+	// Footer: what df -h would not tell you. The warnings themselves are
+	// computed in the system package, so structuredContent carries them too.
 	for _, warn := range stats.Warnings {
 		fmt.Fprintf(&b, "\nwarning: %s\n", warn)
 	}

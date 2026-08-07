@@ -16,8 +16,9 @@ of disk?"* instead of SSH-ing in to run `df -h`.
 | `system_memory_stats` | — | RAM and swap usage, with `available` and `used_percent` as the pressure signals |
 | `system_disk_usage` | `include_all` (optional, default `false`) | disk usage per mountpoint, fullest first, plus inode usage |
 
-Every tool returns both a human-readable text rendering and structured JSON, so the model can
-read the table or the raw numbers.
+Every tool returns both a compact text rendering and structured JSON, so a client can use the
+table or the raw numbers. Sizes in the JSON are plain byte counts on `*_bytes` fields; the
+human-readable units are rendered once, in the text, rather than duplicated per value.
 
 Two details the tools handle that a plain `df -h` / `free -h` will not:
 
@@ -119,11 +120,14 @@ This requires key-based SSH auth — there is no terminal to type a password int
 `system_cpu_cores`:
 
 ```
-cpu0   [|||||||||                     ]  30.0%  (usr 16.0  sys 14.0  io 0.0)
-cpu1   [|||||                         ]  18.0%  (usr 10.0  sys 8.0  io 0.0)
-cpu2   [||||                          ]  12.2%  (usr 8.2  sys 4.1  io 0.0)
-cpu3   [|||                           ]  10.0%  (usr 4.0  sys 6.0  io 0.0)
+cpu0    30.0%  (usr 16.0  sys 14.0  io 0.0)
+cpu1    18.0%  (usr 10.0  sys 8.0  io 0.0)
+cpu2    12.2%  (usr 8.2  sys 4.1  io 0.0)
+cpu3    10.0%  (usr 4.0  sys 6.0  io 0.0)
 ```
+
+The full per-core breakdown — including nice, IRQ and steal — is in the structured
+JSON alongside this summary.
 
 `system_memory_stats`:
 

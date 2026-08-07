@@ -37,28 +37,21 @@ func handleCoreUsage(
 
 	return &sdk.CallToolResult{
 		Content: []sdk.Content{
-			&sdk.TextContent{Text: renderCoreBars(cores)},
+			&sdk.TextContent{Text: renderCores(cores)},
 		},
 	}, out, nil
 }
 
-func renderCoreBars(cores []system.CoreUsage) string {
+// One dense line per core. Deliberately no ASCII bar: a bar is a *visual*
+// encoding of the percentage printed right next to it, so it costs tokens
+// without telling the model anything the number does not. The full
+// breakdown (nice, IRQ, steal) stays available in structuredContent.
+func renderCores(cores []system.CoreUsage) string {
 	var b strings.Builder
 	for _, c := range cores {
-		fmt.Fprintf(&b, "%-6s [%s] %5.1f%%  (usr %.1f  sys %.1f  io %.1f)\n",
-			c.Core, bar(c.TotalPercent, 30), c.TotalPercent,
+		fmt.Fprintf(&b, "%-6s %5.1f%%  (usr %.1f  sys %.1f  io %.1f)\n",
+			c.Core, c.TotalPercent,
 			c.UserPercent, c.SystemPercent, c.IOWaitPercent)
 	}
 	return b.String()
-}
-
-func bar(percent float64, width int) string {
-	filled := int(percent/100*float64(width) + 0.5)
-	if filled < 0 {
-		filled = 0
-	}
-	if filled > width {
-		filled = width
-	}
-	return strings.Repeat("|", filled) + strings.Repeat(" ", width-filled)
 }

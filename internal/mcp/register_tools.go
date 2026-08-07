@@ -18,16 +18,16 @@ func registerTools(s *sdk.Server) {
 		Name: "system_cpu_cores",
 		Description: "Returns the detailed usage of each CPU core individually, " +
 			"broken down into user, kernel, nice, interrupt and I/O wait time — " +
-			"equivalent to htop's per-core bars. Takes about 500ms.",
+			"the same breakdown htop shows per core. Takes about 500ms.",
 	}, handleCoreUsage)
 
 	// system memory tool
 	sdk.AddTool(s, &sdk.Tool{
 		Name: "system_memory_stats",
 		Description: "Returns the server's RAM and swap usage. " +
-			"To assess memory pressure use 'available' and 'used_percent', " +
-			"never 'free' — Linux keeps idle RAM occupied with disk cache, " +
-			"so a low 'free' is normal and does not indicate a problem. Immediate response.",
+			"To assess memory pressure use 'available_bytes' and 'used_percent', " +
+			"never 'free_bytes' — Linux keeps idle RAM occupied with disk cache, " +
+			"so a low 'free_bytes' is normal and does not indicate a problem. Immediate response.",
 	}, handleMemoryStats)
 
 	// system disk tool

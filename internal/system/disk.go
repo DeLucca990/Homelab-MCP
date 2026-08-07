@@ -17,9 +17,9 @@ type DiskUsage struct {
 	Fstype     string `json:"fstype"`
 	ReadOnly   bool   `json:"read_only"`
 
-	Total       Bytes   `json:"total"`
-	Used        Bytes   `json:"used"`
-	Free        Bytes   `json:"free"`
+	TotalBytes  uint64  `json:"total_bytes"`
+	UsedBytes   uint64  `json:"used_bytes"`
+	FreeBytes   uint64  `json:"free_bytes"`
 	UsedPercent float64 `json:"used_percent"`
 
 	// Inodes can run out independently of space. See the note below.
@@ -52,6 +52,10 @@ var ignoredFstypes = map[string]bool{
 var ignoredPrefixes = []string{
 	"/snap/", "/var/lib/docker/", "/var/lib/containers/", "/var/lib/kubelet/",
 }
+
+// Above this inode percentage we warn explicitly — it is the kind of
+// problem that `df -h` hides completely.
+const inodeWarnThreshold = 80.0
 
 func GetDiskStats(ctx context.Context, includeAll bool) (DiskStats, error) {
 	parts, err := disk.PartitionsWithContext(ctx, includeAll)
@@ -90,13 +94,6 @@ func GetDiskStats(ctx context.Context, includeAll bool) (DiskStats, error) {
 
 	stats := DiskStats{Filesystems: results, SkippedCount: skipped}
 
-	for _, fs := range results {
-		if fs.Error != "" {
-			stats.Warnings = append(stats.Warnings,
-				fmt.Sprintf("%s: %s", fs.Mountpoint, fs.Error))
-		}
-	}
-
 	// Fullest first: whatever needs attention shows up at the top.
 	slices.SortFunc(stats.Filesystems, func(a, b DiskUsage) int {
 		switch {
@@ -108,6 +105,24 @@ func GetDiskStats(ctx context.Context, includeAll bool) (DiskStats, error) {
 			return strings.Compare(a.Mountpoint, b.Mountpoint)
 		}
 	})
+
+	// Warnings are derived HERE, not in the renderer. A client that reads only
+	// structuredContent must see them too — an inode warning that exists only
+	// in the rendered table is invisible to half the protocol.
+	// Built after the sort so their order matches the table's.
+	for _, fs := range stats.Filesystems {
+		if fs.Error != "" {
+			stats.Warnings = append(stats.Warnings,
+				fmt.Sprintf("%s: %s", fs.Mountpoint, fs.Error))
+			continue
+		}
+		if fs.InodesUsedPercent >= inodeWarnThreshold {
+			stats.Warnings = append(stats.Warnings, fmt.Sprintf(
+				"%s is at %.0f%% inode usage (%d of %d) — it can fail with "+
+					`"no space left on device" even with free space`,
+				fs.Mountpoint, fs.InodesUsedPercent, fs.InodesUsed, fs.InodesTotal))
+		}
+	}
 
 	return stats, nil
 }
@@ -149,9 +164,9 @@ func usageFor(ctx context.Context, p disk.PartitionStat) DiskUsage {
 		return u
 	}
 
-	u.Total = newBytes(stat.Total)
-	u.Used = newBytes(stat.Used)
-	u.Free = newBytes(stat.Free)
+	u.TotalBytes = stat.Total
+	u.UsedBytes = stat.Used
+	u.FreeBytes = stat.Free
 	u.UsedPercent = round2(stat.UsedPercent)
 	u.InodesTotal = stat.InodesTotal
 	u.InodesUsed = stat.InodesUsed
@@ -194,26 +209,4 @@ func usageWithTimeout(ctx context.Context, path string, timeout time.Duration) (
 		return nil, fmt.Errorf("timeout of %s while querying the mountpoint "+
 			"(network mount unavailable?)", timeout)
 	}
-}
-
-// CompactBytes formats in the style of `df -h`: one decimal place below 10,
-// none above. Binary units, single-letter suffix.
-//
-// Exported (capital initial) because the mcp package needs it to render
-// the table — it is exactly the package boundary you just touched.
-func CompactBytes(b uint64) string {
-	const unit = 1024
-	if b < unit {
-		return fmt.Sprintf("%dB", b)
-	}
-	div, exp := uint64(unit), 0
-	for n := b / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	v := float64(b) / float64(div)
-	if v < 10 {
-		return fmt.Sprintf("%.1f%c", v, "KMGTPE"[exp])
-	}
-	return fmt.Sprintf("%.0f%c", v, "KMGTPE"[exp])
 }
