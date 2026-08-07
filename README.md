@@ -15,18 +15,43 @@ of disk?"* instead of SSH-ing in to run `df -h`.
 | `system_cpu_cores` | `sample_ms` (optional, default `500`, max `5000`) | per-core usage split into user / kernel / nice / IRQ / I/O wait — htop's per-core bars |
 | `system_memory_stats` | — | RAM and swap usage, with `available` and `used_percent` as the pressure signals |
 | `system_disk_usage` | `include_all` (optional, default `false`) | disk usage per mountpoint, fullest first, plus inode usage |
+| `system_service_status` | `units` (optional), `include_all` (optional, default `false`) | systemd service state — failed, stuck starting, or crash-looping units, worst first |
 
 Every tool returns both a compact text rendering and structured JSON, so a client can use the
 table or the raw numbers. Sizes in the JSON are plain byte counts on `*_bytes` fields; the
 human-readable units are rendered once, in the text, rather than duplicated per value.
 
-Two details the tools handle that a plain `df -h` / `free -h` will not:
+Details the tools handle that a plain `df -h` / `free -h` / `systemctl status` will not:
 
 - **Inode exhaustion.** A filesystem can fail with `no space left on device` while still showing
   free bytes. `system_disk_usage` warns above 80% inode usage.
 - **Hung network mounts.** `statfs` on an unreachable NFS/SMB mount blocks in the kernel and
   ignores context cancellation. Each mountpoint is queried with a 2s timeout, so one dead mount
   degrades to a warning instead of hanging the whole call.
+- **Crash loops that look healthy.** A service restarting every few seconds is `active` in any
+  point-in-time check. `system_service_status` reports the restart count and how long the unit
+  has actually held its current state, so "up" and "up for 9 seconds after 800 restarts" are
+  told apart — and it names the reason systemd recorded, including OOM kills.
+
+## What it can and cannot do
+
+**Every tool is read-only.** Nothing here starts, stops, restarts, writes, or deletes
+anything — the server observes and reports.
+
+Most data comes from reading the kernel through [gopsutil](https://github.com/shirou/gopsutil).
+The one exception is `system_service_status`, which invokes `systemctl`. Two properties bound
+what that can do:
+
+- **No shell.** The binary is executed through `execve` with an argument vector, not through
+  `sh -c`. Shell metacharacters in any input are inert — there is no string a caller can supply
+  that becomes a second command.
+- **Fixed verbs, validated arguments.** Only `list-units` and `show` are ever invoked, both
+  read-only, and neither is caller-selectable. Unit names supplied by the caller are validated
+  against systemd's own naming rules before execution, so an argument cannot be smuggled in as
+  an option (`systemctl --host=…` would otherwise open an outbound SSH connection).
+
+The server runs with the privileges of whoever launches it, which is normally your MCP client,
+not root. Read-only tools need no elevation.
 
 ## Requirements
 
@@ -148,6 +173,30 @@ warning: / is at 92% inode usage (54983168 of 59768832) — it can fail with
 "no space left on device" even with free space
 
 (14 mounts filtered out; use include_all to see them)
+```
+
+`system_service_status`:
+
+```
+UNIT               LOAD    ACTIVE      SUB     RESTARTS  FOR
+jellyfin.service   loaded  failed      failed         5  1m
+sonarr.service     loaded  failed      failed         0  2m
+nginx.service      loaded  activating  start          0  2m
+
+warning: jellyfin.service failed — was killed by the OOM killer, after 5 restarts
+(systemd stopped retrying)
+
+warning: sonarr.service failed — exited with code 3
+
+warning: nginx.service has been starting for 122s without reaching active — it may be stuck
+
+(41 healthy units omitted; use include_all to see them)
+```
+
+On a healthy host it answers plainly rather than returning an empty list:
+
+```
+no services needing attention (41 units, 11 active, 0 failed)
 ```
 
 ## Project layout

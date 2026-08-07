@@ -39,4 +39,16 @@ func registerTools(s *sdk.Server) {
 			"Also includes inode usage: a disk can become unusable from inode exhaustion " +
 			"even with plenty of free bytes.",
 	}, handleDiskStats)
+
+	// systemd services tool
+	sdk.AddTool(s, &sdk.Tool{
+		Name: "system_service_status",
+		Description: "Returns the state of systemd service units — whether the services on " +
+			"this server are running. By default it scans every unit and reports only those " +
+			"needing attention (failed, stuck starting, or restarting), worst first; pass " +
+			"'units' to ask about specific ones by name. Reports the restart count, which is " +
+			"what distinguishes a service that is genuinely running from one that is " +
+			"crash-looping — the latter reads as active in any point-in-time check. " +
+			"Linux only; errors on hosts without systemd.",
+	}, handleServiceStatus)
 }
