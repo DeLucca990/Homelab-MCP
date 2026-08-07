@@ -30,10 +30,22 @@ const (
 	restartWarnThreshold = 5
 )
 
+// Port is one published or exposed mapping. Docker reports the same mapping
+// once per host address family, so IPv4/IPv6 duplicates are collapsed here —
+// `0.0.0.0:8989->8989/tcp, :::8989->8989/tcp` is one fact, not two.
+type Port struct {
+	ContainerPort int    `json:"container_port"`
+	HostPort      int    `json:"host_port,omitempty" jsonschema:"port on the host that reaches this container; absent means the port is exposed but not published, so it is unreachable from outside the docker network"`
+	Protocol      string `json:"protocol"`
+}
+
 type Container struct {
 	Name  string `json:"name"`
 	Image string `json:"image"`
 	ID    string `json:"id" jsonschema:"short container id"`
+
+	Command string `json:"command,omitempty" jsonschema:"the container's entrypoint command"`
+	Ports   []Port `json:"ports,omitempty"`
 
 	State  string `json:"state" jsonschema:"running, exited, restarting, paused, dead or created"`
 	Status string `json:"status" jsonschema:"the human-readable status docker itself reports"`
@@ -46,6 +58,7 @@ type Container struct {
 	OOMKilled    bool `json:"oom_killed,omitempty" jsonschema:"true when the kernel killed this container for exceeding its memory limit"`
 
 	StateForSeconds  uint64 `json:"state_for_seconds,omitempty" jsonschema:"how long the container has been in its current state; short uptime with a high restart count means it is flapping right now"`
+	AgeSeconds       uint64 `json:"age_seconds,omitempty" jsonschema:"seconds since the container was created; a large gap between this and state_for_seconds means the container was restarted long after it was deployed"`
 	MemoryLimitBytes uint64 `json:"memory_limit_bytes,omitempty" jsonschema:"configured memory ceiling; absent means unlimited"`
 
 	RestartPolicy string `json:"restart_policy,omitempty"`
@@ -235,10 +248,18 @@ func exitCodeHint(code int) string {
 // enormous dependency tree — into a module with two direct dependencies.
 
 type summary struct {
-	ID    string   `json:"Id"`
-	Names []string `json:"Names"`
-	Image string   `json:"Image"`
-	State string   `json:"State"`
+	ID      string   `json:"Id"`
+	Names   []string `json:"Names"`
+	Image   string   `json:"Image"`
+	State   string   `json:"State"`
+	Command string   `json:"Command"`
+	Created int64    `json:"Created"`
+	Ports   []struct {
+		IP          string `json:"IP"`
+		PrivatePort int    `json:"PrivatePort"`
+		PublicPort  int    `json:"PublicPort"`
+		Type        string `json:"Type"`
+	} `json:"Ports"`
 }
 
 type inspectResult struct {
@@ -344,10 +365,17 @@ func listContainers(ctx context.Context, client *http.Client) ([]summary, error)
 
 func inspect(ctx context.Context, client *http.Client, s summary) Container {
 	c := Container{
-		ID:    shortID(s.ID),
-		Name:  displayName(s.Names),
-		Image: s.Image,
-		State: s.State,
+		ID:      shortID(s.ID),
+		Name:    displayName(s.Names),
+		Image:   s.Image,
+		State:   s.State,
+		Command: s.Command,
+		Ports:   collectPorts(s),
+	}
+	if s.Created > 0 {
+		if age := time.Since(time.Unix(s.Created, 0)); age > 0 {
+			c.AgeSeconds = uint64(age.Seconds())
+		}
 	}
 
 	var r inspectResult
@@ -384,6 +412,45 @@ func inspect(ctx context.Context, client *http.Client, s summary) Container {
 	c.Status = describe(c)
 
 	return c
+}
+
+// collectPorts flattens Docker's port list, dropping the duplicate every
+// published mapping gets from being bound on both 0.0.0.0 and ::.
+func collectPorts(s summary) []Port {
+	seen := make(map[Port]bool, len(s.Ports))
+	out := make([]Port, 0, len(s.Ports))
+
+	for _, p := range s.Ports {
+		port := Port{ContainerPort: p.PrivatePort, HostPort: p.PublicPort, Protocol: p.Type}
+		if seen[port] {
+			continue
+		}
+		seen[port] = true
+		out = append(out, port)
+	}
+
+	// Published ports first, then by number: what is reachable from outside is
+	// what the reader is looking for.
+	slices.SortFunc(out, func(a, b Port) int {
+		if (a.HostPort == 0) != (b.HostPort == 0) {
+			if a.HostPort == 0 {
+				return 1
+			}
+			return -1
+		}
+		if d := a.HostPort - b.HostPort; d != 0 {
+			return d
+		}
+		if d := a.ContainerPort - b.ContainerPort; d != 0 {
+			return d
+		}
+		return strings.Compare(a.Protocol, b.Protocol)
+	})
+
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // secondsSince parses a Docker RFC3339 timestamp. Docker writes the zero time

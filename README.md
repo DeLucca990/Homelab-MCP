@@ -218,11 +218,11 @@ no services needing attention (41 units, 11 active, 0 failed)
 `docker_container_status`:
 
 ```
-NAME       IMAGE   STATE         HEALTH     RESTARTS  FOR
-jellyfin   alpine  exited (OOM)  -                 0  2m
-sonarr     alpine  restarting    -                11  34s
-radarr     alpine  running       unhealthy         0  2m
-nginx      alpine  running       healthy           0  2m
+NAME         IMAGE                     STATE         HEALTH     RESTARTS  FOR    PORTS
+jellyfin     linuxserver/jellyfin      exited (OOM)  -                 0  2m     -
+sonarr       linuxserver/sonarr        restarting    -                11  34s    8989/tcp
+radarr       linuxserver/radarr        running       unhealthy         0  2m     7878/tcp
+qbittorrent  linuxserver/qbittorrent   running       healthy           0  92d1h  8080/tcp
 
 warning: jellyfin was killed for exceeding its memory limit (20M) — raise the limit or fix the leak
 
@@ -233,6 +233,11 @@ the process is up while the service behind it is not
 
 (6 cleanly-stopped containers omitted; use include_all to see them)
 ```
+
+The `PORTS` column lists only **published** mappings — the ports that actually reach the
+container from the host. Ports that are merely exposed appear in the structured JSON with no
+`host_port`, but are left out of the table, where `docker ps` lists them in a way that reads as
+reachable. IPv4 and IPv6 bindings of the same mapping are collapsed into one entry.
 
 ## Project layout
 

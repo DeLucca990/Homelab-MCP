@@ -36,7 +36,6 @@ func renderContainerTable(status containers.ContainerStatus) string {
 	var b strings.Builder
 
 	if len(status.Containers) == 0 {
-		// An empty list is a result, not a failure.
 		if status.TotalCount == 0 {
 			return "no containers on this host\n"
 		}
@@ -45,9 +44,9 @@ func renderContainerTable(status containers.ContainerStatus) string {
 		return b.String()
 	}
 
-	type row struct{ name, image, state, health, restarts, since string }
+	type row struct{ name, image, state, health, restarts, since, ports string }
 
-	head := row{"NAME", "IMAGE", "STATE", "HEALTH", "RESTARTS", "FOR"}
+	head := row{"NAME", "IMAGE", "STATE", "HEALTH", "RESTARTS", "FOR", "PORTS"}
 
 	rows := make([]row, 0, len(status.Containers))
 	for _, c := range status.Containers {
@@ -57,8 +56,6 @@ func renderContainerTable(status containers.ContainerStatus) string {
 		}
 		state := c.State
 		if c.OOMKilled {
-			// The single most load-bearing fact about this container, and the
-			// one no listing shows — it does not survive being a column alone.
 			state += " (OOM)"
 		} else if c.State == "exited" && c.ExitCode != 0 {
 			state = fmt.Sprintf("exited (%d)", c.ExitCode)
@@ -71,27 +68,30 @@ func renderContainerTable(status containers.ContainerStatus) string {
 			health:   health,
 			restarts: fmt.Sprintf("%d", c.RestartCount),
 			since:    compactDuration(c.StateForSeconds),
+			ports:    formatPorts(c.Ports),
 		})
 	}
 
 	// Same two-pass measure-then-write as the disk and service tables.
-	w := [5]int{len(head.name), len(head.image), len(head.state), len(head.health), len(head.restarts)}
+	w := [6]int{len(head.name), len(head.image), len(head.state), len(head.health), len(head.restarts), len(head.since)}
 	for _, r := range rows {
 		w[0] = max(w[0], len(r.name))
 		w[1] = max(w[1], len(r.image))
 		w[2] = max(w[2], len(r.state))
 		w[3] = max(w[3], len(r.health))
 		w[4] = max(w[4], len(r.restarts))
+		w[5] = max(w[5], len(r.since))
 	}
 
 	write := func(r row) {
-		fmt.Fprintf(&b, "%-*s  %-*s  %-*s  %-*s  %*s  %s\n",
+		fmt.Fprintf(&b, "%-*s  %-*s  %-*s  %-*s  %*s  %-*s  %s\n",
 			w[0], r.name,
 			w[1], r.image,
 			w[2], r.state,
 			w[3], r.health,
 			w[4], r.restarts,
-			r.since)
+			w[5], r.since,
+			r.ports)
 	}
 
 	write(head)
@@ -110,4 +110,22 @@ func renderContainerTable(status containers.ContainerStatus) string {
 	}
 
 	return b.String()
+}
+
+func formatPorts(ports []containers.Port) string {
+	parts := make([]string, 0, len(ports))
+	for _, p := range ports {
+		switch {
+		case p.HostPort == 0:
+			continue
+		case p.HostPort == p.ContainerPort:
+			parts = append(parts, fmt.Sprintf("%d/%s", p.HostPort, p.Protocol))
+		default:
+			parts = append(parts, fmt.Sprintf("%d->%d/%s", p.HostPort, p.ContainerPort, p.Protocol))
+		}
+	}
+	if len(parts) == 0 {
+		return "-"
+	}
+	return strings.Join(parts, ",")
 }
