@@ -29,4 +29,14 @@ func registerTools(s *sdk.Server) {
 			"nunca 'free' — o Linux mantém a RAM ociosa ocupada com cache de disco, " +
 			"então 'free' baixo é normal e não indica problema. Resposta imediata.",
 	}, handleMemoryStats)
+
+	// system disk tool
+	sdk.AddTool(s, &sdk.Tool{
+		Name: "system_disk_usage",
+		Description: "Retorna o uso de espaço em disco por ponto de montagem, ordenado do " +
+			"mais cheio para o mais vazio. Por padrão filtra pseudo-filesystems, pacotes snap " +
+			"e camadas de container, que aparecem como 100% cheios sem que isso indique problema. " +
+			"Inclui também o uso de inodes: um disco pode ficar inutilizável por esgotamento de " +
+			"inodes mesmo com bytes livres de sobra.",
+	}, handleDiskStats)
 }
