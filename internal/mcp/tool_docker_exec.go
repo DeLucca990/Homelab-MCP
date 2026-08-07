@@ -21,17 +21,14 @@ import (
 //     HOMELAB_MCP_ALLOW_CONTAINER_NAMES environment variable, and the tool is not
 //     registered at all when that variable is empty. Nothing the model or the
 //     client does can widen this.
-//  2. Human confirmation — every execution requires the user to approve THIS
-//     command. Requested through the protocol (SEP-2322 input requests, which
-//     the SDK degrades to elicitation on older clients), not left to the
-//     client's own prompting, so "always allow" on the tool does not silently
-//     turn it into a blank cheque.
-//  3. Fingerprint — the approved (container, command) pair is hashed into the
-//     request state and re-checked on the retry, so the command that runs is
-//     provably the one that was shown.
-//
-// If the client cannot ask the user, the confirmation request fails and the
-// command does not run. This fails closed by design.
+//  2. Human confirmation — every execution is approved by the user first.
+//     Where the client supports it, the request comes from the server through
+//     the protocol (SEP-2322 input requests / elicitation), showing this exact
+//     command. Where it does not, the server defers to the approval prompt the
+//     client shows before calling any tool. See confirm.go for the trade.
+//  3. Fingerprint — when the server asked, the approved (container, command)
+//     pair is hashed into the request state and re-checked on the retry, so
+//     the command that runs is provably the one that was shown.
 
 type execInput struct {
 	Container      string   `json:"container" jsonschema:"name of the container to run the command in; must be in the server's exec allowlist"`
@@ -53,6 +50,7 @@ func handleExec(
 		message:     confirmationMessage(in),
 		fingerprint: containers.Fingerprint(in.Container, in.Command),
 		refusal:     "command not run",
+		subject:     fmt.Sprintf("exec in %s: %s", in.Container, strings.Join(in.Command, " ")),
 	})
 	if !approved {
 		return pending, containers.ExecResult{}, err

@@ -38,6 +38,7 @@ func handleRestart(
 			in.Container),
 		fingerprint: containers.Fingerprint(in.Container, []string{"restart"}),
 		refusal:     "container not restarted",
+		subject:     fmt.Sprintf("restart %s", in.Container),
 	})
 	if !approved {
 		return pending, containers.RestartResult{}, err

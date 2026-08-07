@@ -76,15 +76,63 @@ With the variable unset, neither tool is **registered at all** — they do not a
 `tools/list`, so the model cannot call them, and the server is entirely read-only. Nothing the
 model or the client does can widen this list.
 
-**2. Your approval, for every single command.** The server requests confirmation through the
-protocol itself (SEP-2322 input requests, which degrade to elicitation on older clients) rather
-than relying on your client's own prompting — so approving the tool once does not turn it into
-a blank cheque. You see the command verbatim before deciding. **If your client cannot ask you,
-the command does not run**: this fails closed.
+> ⚠️ **Running over SSH? The `env` block above does not reach the server.** It sets variables
+> for the local `ssh` process, and SSH does not forward arbitrary variables (that would need
+> `SendEnv` client-side plus a matching `AcceptEnv` in the remote `sshd_config`). Set it in the
+> remote command instead:
+>
+> ```json
+> {
+>   "mcpServers": {
+>     "homelab": {
+>       "command": "ssh",
+>       "args": [
+>         "user@homelab",
+>         "HOMELAB_MCP_ALLOW_CONTAINER_NAMES=jellyfin,sonarr HOMELAB_MCP_TRUST_CLIENT_CONFIRMATION=1 /opt/homelab-mcp/bin/server"
+>       ]
+>     }
+>   }
+> }
+> ```
 
-**3. A fingerprint tying the approval to the command.** The approved container and argument
-vector are hashed into the request state and re-checked before execution, so what runs is
-provably what was shown.
+**Checking whether it took.** The server states its mode on startup, in the client's MCP log:
+
+```
+[homelab-mcp] action tools ENABLED for: jellyfin, sonarr
+[homelab-mcp] read-only mode: no action tools registered (set HOMELAB_MCP_ALLOW_CONTAINER_NAMES to enable them)
+```
+
+If the assistant says it has no way to act on containers, that second line is why — the tools
+were never registered, so it is telling the truth. **The list is read once, at startup**, so
+restart your MCP client after changing it.
+
+**2. Your approval, before anything runs.** Which side asks depends on the client:
+
+- **Clients that support MCP elicitation** get the request from the server, showing the exact
+  command about to run. This is per-command, and setting the tool to always-allow does not
+  bypass it. Nothing else is needed.
+- **Clients that do not** — Claude Desktop among them at the time of writing — cannot be asked
+  anything by the server, so it refuses to act. They do prompt for tool approval themselves,
+  and you can tell the server to accept that by setting
+  `HOMELAB_MCP_TRUST_CLIENT_CONFIRMATION=1`.
+
+That second setting is you vouching for your client, and it has to be: the identity a client
+reports is self-declared and unauthenticated, so a server cannot recognise a trustworthy client
+— it can only be told. Know what you are accepting: the client's prompt is per-tool rather than
+per-command, and a client set to always-allow stops asking. The container allowlist still holds
+in every case.
+
+The server states what it is doing, so neither path is silent:
+
+```
+[homelab-mcp] client connected: name="claude-ai" version="0.1.0"; confirmations for actions: the client's own approval prompt
+[homelab-mcp] restart radarr: approved by the user
+[homelab-mcp] restart radarr: proceeding on the approval prompt of "claude-ai" (HOMELAB_MCP_TRUST_CLIENT_CONFIRMATION is set)
+```
+
+**3. A fingerprint tying the approval to the command.** When the server is the one asking, the
+approved container and argument vector are hashed into the request state and re-checked before
+execution, so what runs is provably what was shown.
 
 Two further properties of `exec`: the command is an **argument vector, not a shell line** — it
 is executed directly, so pipes and redirection do nothing unless you explicitly ask for a shell
