@@ -8,8 +8,6 @@ import (
 	"github.com/DeLucca990/homelab-mcp/internal/containers"
 )
 
-type emptyInput struct{}
-
 func registerTools(s *sdk.Server) {
 	// system host tool
 	sdk.AddTool(s, &sdk.Tool{
@@ -133,5 +131,3 @@ func registerExecTool(s *sdk.Server) {
 			"Prefer the read-only tools for anything you can answer without running code.",
 	}, handleExec)
 }
-
-func ptr[T any](v T) *T { return new(v) }

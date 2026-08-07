@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -44,47 +43,28 @@ func renderServiceTable(status services.ServiceStatus) string {
 		return b.String()
 	}
 
-	type row struct{ unit, load, active, sub, restarts, since string }
+	cols := []column{
+		{"UNIT", alignLeft},
+		{"LOAD", alignLeft},
+		{"ACTIVE", alignLeft},
+		{"SUB", alignLeft},
+		{"RESTARTS", alignRight},
+		{"FOR", alignLeft},
+	}
 
-	head := row{"UNIT", "LOAD", "ACTIVE", "SUB", "RESTARTS", "FOR"}
-
-	rows := make([]row, 0, len(status.Units))
+	rows := make([][]string, 0, len(status.Units))
 	for _, u := range status.Units {
-		rows = append(rows, row{
-			unit:     u.Name,
-			load:     u.LoadState,
-			active:   u.ActiveState,
-			sub:      u.SubState,
-			restarts: fmt.Sprintf("%d", u.Restarts),
-			since:    compactDuration(u.StateForSeconds),
+		rows = append(rows, []string{
+			u.Name,
+			u.LoadState,
+			u.ActiveState,
+			u.SubState,
+			fmt.Sprintf("%d", u.Restarts),
+			compactDuration(u.StateForSeconds),
 		})
 	}
 
-	// Same two-pass measure-then-write as the disk table: widths are only
-	// knowable after seeing every row.
-	w := [5]int{len(head.unit), len(head.load), len(head.active), len(head.sub), len(head.restarts)}
-	for _, r := range rows {
-		w[0] = max(w[0], len(r.unit))
-		w[1] = max(w[1], len(r.load))
-		w[2] = max(w[2], len(r.active))
-		w[3] = max(w[3], len(r.sub))
-		w[4] = max(w[4], len(r.restarts))
-	}
-
-	write := func(r row) {
-		fmt.Fprintf(&b, "%-*s  %-*s  %-*s  %-*s  %*s  %s\n",
-			w[0], r.unit,
-			w[1], r.load,
-			w[2], r.active,
-			w[3], r.sub,
-			w[4], r.restarts,
-			r.since)
-	}
-
-	write(head)
-	for _, r := range rows {
-		write(r)
-	}
+	b.WriteString(table(cols, rows))
 
 	// Footer: what a plain status check would not tell you. Computed in the
 	// services package, so structuredContent carries these too.
@@ -97,23 +77,4 @@ func renderServiceTable(status services.ServiceStatus) string {
 	}
 
 	return b.String()
-}
-
-// compactDuration keeps the age column to a few characters — a table is no
-// place for "52h4m28.5s", which is what time.Duration would render.
-func compactDuration(seconds uint64) string {
-	if seconds == 0 {
-		return "-"
-	}
-	d := time.Duration(seconds) * time.Second
-	switch {
-	case d < time.Minute:
-		return fmt.Sprintf("%ds", int(d.Seconds()))
-	case d < time.Hour:
-		return fmt.Sprintf("%dm", int(d.Minutes()))
-	case d < 24*time.Hour:
-		return fmt.Sprintf("%dh%dm", int(d.Hours()), int(d.Minutes())%60)
-	default:
-		return fmt.Sprintf("%dd%dh", int(d.Hours())/24, int(d.Hours())%24)
-	}
 }

@@ -32,7 +32,6 @@ import (
 //
 // If the client cannot ask the user, the confirmation request fails and the
 // command does not run. This fails closed by design.
-const confirmKey = "confirm"
 
 type execInput struct {
 	Container      string   `json:"container" jsonschema:"name of the container to run the command in; must be in the server's exec allowlist"`
@@ -50,51 +49,13 @@ func handleExec(
 			fmt.Errorf("both 'container' and a non-empty 'command' are required")
 	}
 
-	fingerprint := containers.Fingerprint(in.Container, in.Command)
-
-	// FIRST PASS: nothing has been approved yet. Describe exactly what would
-	// run and hand the decision to the user.
-	if len(req.Params.InputResponses) == 0 {
-		return &sdk.CallToolResult{
-			InputRequests: sdk.InputRequestMap{
-				confirmKey: &sdk.ElicitParams{Message: confirmationMessage(in)},
-			},
-			RequestState: fingerprint,
-		}, containers.ExecResult{}, nil
-	}
-
-	// SECOND PASS: an answer came back. Anything other than an explicit accept
-	// stops here.
-	resp, ok := req.Params.InputResponses[confirmKey]
-	if !ok {
-		return nil, containers.ExecResult{},
-			fmt.Errorf("command not run: no confirmation was returned")
-	}
-	result, ok := resp.(*sdk.ElicitResult)
-	if !ok || result == nil {
-		return nil, containers.ExecResult{},
-			fmt.Errorf("command not run: confirmation response was not understood")
-	}
-	switch result.Action {
-	case "accept":
-		// proceed
-	case "decline":
-		return nil, containers.ExecResult{},
-			fmt.Errorf("command not run: the user declined it")
-	case "cancel":
-		return nil, containers.ExecResult{},
-			fmt.Errorf("command not run: the user dismissed the confirmation without deciding")
-	default:
-		return nil, containers.ExecResult{},
-			fmt.Errorf("command not run: unrecognised confirmation action %q", result.Action)
-	}
-
-	// The user approved a specific command. Verify that is still the one being
-	// asked for — the retry carries its own parameters, and they must match the
-	// ones that were shown.
-	if req.Params.RequestState != fingerprint {
-		return nil, containers.ExecResult{}, fmt.Errorf(
-			"command not run: the approved command does not match the one submitted")
+	approved, pending, err := requireApproval(req, approval{
+		message:     confirmationMessage(in),
+		fingerprint: containers.Fingerprint(in.Container, in.Command),
+		refusal:     "command not run",
+	})
+	if !approved {
+		return pending, containers.ExecResult{}, err
 	}
 
 	out, err := containers.Exec(ctx, in.Container, in.Command,
