@@ -55,28 +55,26 @@ Two tools can change something, and both are **off unless you turn them on**:
 
 Each is guarded by three independent layers.
 
-**1. An allowlist you set, naming the containers it may touch.** The two tools have
-**separate** lists, because debugging inside a service and taking it offline are different
-grants. Each holds a comma-separated list of container names (the `NAMES` column of
-`docker ps` — not the image, not the id):
+**1. An allowlist you set, naming the containers they may touch.** One list covers both
+tools: a shell inside a container already carries the power to take that container down, so
+"may run commands in X" and "may restart X" are not meaningfully separable grants. Set
+`HOMELAB_MCP_ALLOW_CONTAINER_NAMES` to a comma-separated list of container names (the `NAMES`
+column of `docker ps` — not the image, not the id):
 
 ```json
 {
   "mcpServers": {
     "homelab": {
       "command": "/absolute/path/to/Homelab-MCP/bin/server",
-      "env": {
-        "HOMELAB_MCP_EXEC_ALLOW_CONTAINER_NAMES": "jellyfin,sonarr",
-        "HOMELAB_MCP_RESTART_ALLOW_CONTAINER_NAMES": "jellyfin"
-      }
+      "env": { "HOMELAB_MCP_ALLOW_CONTAINER_NAMES": "jellyfin,sonarr" }
     }
   }
 }
 ```
 
-A tool whose variable is unset is **not registered at all** — it does not appear in
-`tools/list`, so the model cannot call it. With neither set, the server is entirely read-only.
-Nothing the model or the client does can widen these lists.
+With the variable unset, neither tool is **registered at all** — they do not appear in
+`tools/list`, so the model cannot call them, and the server is entirely read-only. Nothing the
+model or the client does can widen this list.
 
 **2. Your approval, for every single command.** The server requests confirmation through the
 protocol itself (SEP-2322 input requests, which degrade to elicitation on older clients) rather

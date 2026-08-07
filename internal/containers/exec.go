@@ -11,20 +11,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 )
-
-// AllowlistEnv names the environment variable that enables execution at all.
-// It holds a comma-separated list of container names.
-//
-// Unset or empty means the exec tool is not registered: the model cannot call
-// what does not exist, and a default install stays entirely read-only. This is
-// the only layer of this feature that cannot be bypassed by a confused client,
-// a client that auto-approves everything, or a model under prompt injection —
-// so it is the one that decides what is reachable at all.
-const AllowlistEnv = "HOMELAB_MCP_EXEC_ALLOW_CONTAINER_NAMES"
 
 const (
 	maxOutputBytes = 16384
@@ -48,21 +37,6 @@ type ExecResult struct {
 	Truncated  bool  `json:"truncated,omitempty" jsonschema:"true when output was cut at the size limit; what is shown is the beginning of the output"`
 	DurationMS int64 `json:"duration_ms"`
 	TimedOut   bool  `json:"timed_out,omitempty"`
-}
-
-// ExecAllowlist returns the container names execution is permitted for.
-func ExecAllowlist() []string { return parseAllowlist(os.Getenv(AllowlistEnv)) }
-
-// ExecEnabled reports whether any container may be executed in at all.
-func ExecEnabled() bool { return len(ExecAllowlist()) > 0 }
-
-func execAllowed(name string) bool {
-	for _, allowed := range ExecAllowlist() {
-		if strings.EqualFold(allowed, name) {
-			return true
-		}
-	}
-	return false
 }
 
 // Fingerprint identifies a specific (container, command) pair. It is carried
@@ -91,9 +65,9 @@ func Exec(ctx context.Context, container string, command []string, timeout time.
 	if len(command) == 0 {
 		return res, errors.New("command is empty")
 	}
-	if !execAllowed(container) {
+	if !actionAllowed(container) {
 		return res, fmt.Errorf("%w: commands may not be run in %q. Allowed: %s",
-			ErrNotAllowed, container, strings.Join(ExecAllowlist(), ", "))
+			ErrNotAllowed, container, strings.Join(ActionAllowlist(), ", "))
 	}
 
 	switch {

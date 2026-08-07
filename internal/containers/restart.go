@@ -4,35 +4,9 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 )
-
-// parseAllowlist reads a comma-separated list of container names. Whitespace is
-// trimmed BEFORE the optional leading slash, because entries are usually
-// written with a space after the comma and " /jellyfin" would otherwise keep
-// its slash and silently match nothing.
-func parseAllowlist(raw string) []string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return nil
-	}
-	var out []string
-	for part := range strings.SplitSeq(raw, ",") {
-		if name := strings.TrimPrefix(strings.TrimSpace(part), "/"); name != "" {
-			out = append(out, name)
-		}
-	}
-	return out
-}
-
-// RestartAllowlistEnv names the environment variable that permits restarting
-// containers. It is deliberately SEPARATE from the exec allowlist: reading logs
-// inside a container and taking that service down for everyone who uses it are
-// different grants, and an operator may reasonably want the first without the
-// second. Set both to the same list if you want both.
-const RestartAllowlistEnv = "HOMELAB_MCP_RESTART_ALLOW_CONTAINER_NAMES"
 
 const (
 	// Seconds Docker waits for the container to stop gracefully before it
@@ -66,25 +40,13 @@ type RestartResult struct {
 	Warnings []string `json:"warnings,omitempty"`
 }
 
-// RestartAllowlist returns the container names that may be restarted.
-func RestartAllowlist() []string { return parseAllowlist(os.Getenv(RestartAllowlistEnv)) }
-
-func restartAllowed(name string) bool {
-	for _, allowed := range RestartAllowlist() {
-		if strings.EqualFold(allowed, name) {
-			return true
-		}
-	}
-	return false
-}
-
 // Restart stops and starts a container, then waits to confirm it came back.
 func Restart(ctx context.Context, name string, stopTimeout int) (RestartResult, error) {
 	res := RestartResult{Container: name}
 
-	if !restartAllowed(name) {
+	if !actionAllowed(name) {
 		return res, fmt.Errorf("%w: %q may not be restarted. Allowed: %s",
-			ErrNotAllowed, name, strings.Join(RestartAllowlist(), ", "))
+			ErrNotAllowed, name, strings.Join(ActionAllowlist(), ", "))
 	}
 
 	switch {

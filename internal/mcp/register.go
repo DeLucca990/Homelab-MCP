@@ -86,7 +86,7 @@ func registerTools(s *sdk.Server) {
 // separate from exec's, because restarting a service and debugging inside one
 // are different grants.
 func registerRestartTool(s *sdk.Server) {
-	allowed := containers.RestartAllowlist()
+	allowed := containers.ActionAllowlist()
 	if len(allowed) == 0 {
 		return
 	}
@@ -110,7 +110,7 @@ func registerRestartTool(s *sdk.Server) {
 }
 
 func registerExecTool(s *sdk.Server) {
-	allowed := containers.ExecAllowlist()
+	allowed := containers.ActionAllowlist()
 	if len(allowed) == 0 {
 		return
 	}

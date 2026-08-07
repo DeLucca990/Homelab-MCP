@@ -18,7 +18,7 @@ import (
 // directions on purpose:
 //
 //  1. Allowlist — the server refuses any container not named in the
-//     HOMELAB_MCP_EXEC_ALLOW_CONTAINER_NAMES environment variable, and the tool is not
+//     HOMELAB_MCP_ALLOW_CONTAINER_NAMES environment variable, and the tool is not
 //     registered at all when that variable is empty. Nothing the model or the
 //     client does can widen this.
 //  2. Human confirmation — every execution requires the user to approve THIS
