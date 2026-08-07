@@ -65,8 +65,7 @@ func renderDiskTable(stats system.DiskStats) string {
 	var b strings.Builder
 	b.WriteString(table(cols, rows))
 
-	// Footer: what df -h would not tell you. The warnings themselves are
-	// computed in the system package, so structuredContent carries them too.
+	// Footer: what `df -h` would not tell you.
 	for _, warn := range stats.Warnings {
 		fmt.Fprintf(&b, "\nwarning: %s\n", warn)
 	}

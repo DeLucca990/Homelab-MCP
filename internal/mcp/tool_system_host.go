@@ -9,7 +9,9 @@ import (
 )
 
 // HOST TOOL
-// Handle signature are always "func(ctx, *sdk.CallToolRequest, In) (*sdk.CallToolResult, Out, error)"
+//
+// Every handler has this shape: func(ctx, *sdk.CallToolRequest, In)
+// (*sdk.CallToolResult, Out, error).
 func handleHostInfo(
 	ctx context.Context,
 	req *sdk.CallToolRequest,
@@ -19,6 +21,7 @@ func handleHostInfo(
 	if err != nil {
 		return nil, system.HostInfo{}, err
 	}
-	// Return nul on CallToolResult, the SDK automatically serializes "info" as content + JSON text
+	// A nil CallToolResult lets the SDK serialize info as both content and
+	// structuredContent.
 	return nil, info, nil
 }

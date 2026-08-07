@@ -17,23 +17,21 @@ import (
 	"github.com/DeLucca990/homelab-mcp/internal/system"
 )
 
-// ErrUnavailable reports that there is no Docker daemon to talk to on this
-// host. Distinct from a permission problem, which says so explicitly.
+// ErrUnavailable means there is no daemon to talk to. Distinct from a
+// permission problem, which says so explicitly.
 var ErrUnavailable = errors.New("docker is not available on this host")
 
 const (
 	defaultSocket  = "/var/run/docker.sock"
 	requestTimeout = 5 * time.Second
 
-	// Above this restart count we warn even while the container is up: a
-	// container restarting every few seconds shows "Up 4 seconds" in every
-	// listing and reads as healthy.
+	// Above this restart count we warn even while the container is up: one
+	// restarting every few seconds shows "Up 4 seconds" and reads as healthy.
 	restartWarnThreshold = 5
 )
 
-// Port is one published or exposed mapping. Docker reports the same mapping
-// once per host address family, so IPv4/IPv6 duplicates are collapsed here —
-// `0.0.0.0:8989->8989/tcp, :::8989->8989/tcp` is one fact, not two.
+// Port is one published or exposed mapping, with the IPv4/IPv6 duplicate
+// collapsed: `0.0.0.0:8989->8989/tcp, :::8989->8989/tcp` is one fact, not two.
 type Port struct {
 	ContainerPort int    `json:"container_port"`
 	HostPort      int    `json:"host_port,omitempty" jsonschema:"port on the host that reaches this container; absent means the port is exposed but not published, so it is unreachable from outside the docker network"`
@@ -64,8 +62,7 @@ type Container struct {
 
 	RestartPolicy string `json:"restart_policy,omitempty"`
 
-	// Filled in when inspecting THIS container failed, without invalidating
-	// the others.
+	// Set when inspecting THIS container failed, without invalidating the rest.
 	Error string `json:"error,omitempty"`
 }
 
@@ -93,9 +90,9 @@ func GetContainerStatus(ctx context.Context, names []string, includeAll bool) (C
 		return ContainerStatus{}, err
 	}
 
-	// Callers filter by name against the listing rather than by querying the
-	// daemon per name: every id we then interpolate into a URL came from
-	// Docker itself, so no caller-supplied string ever reaches a request path.
+	// Filtering against the listing rather than querying per name means every
+	// id interpolated into a URL came from Docker itself, so no caller-supplied
+	// string ever reaches a request path.
 	explicit := len(names) > 0
 	if explicit {
 		summaries = matchNames(summaries, names)
@@ -105,9 +102,8 @@ func GetContainerStatus(ctx context.Context, names []string, includeAll bool) (C
 		return ContainerStatus{Containers: []Container{}}, nil
 	}
 
-	// One goroutine per container, each writing to its own index — the same
-	// parallel-map shape as the disk collector, and for the same reason: the
-	// inspect calls are independent and latency adds up serially.
+	// One goroutine per container, each writing to its own index: the inspect
+	// calls are independent and their latency adds up serially.
 	all := make([]Container, len(summaries))
 	var wg sync.WaitGroup
 	for i, s := range summaries {
@@ -172,15 +168,14 @@ func severity(c Container) int {
 	}
 }
 
-// isInteresting keeps running containers (the answer to "what is on this
-// server") plus anything broken, and drops the cleanly-exited ones a homelab
-// accumulates from one-shot runs.
+// isInteresting keeps running containers plus anything broken, and drops the
+// cleanly-exited ones a homelab accumulates from one-shot runs.
 func isInteresting(c Container) bool {
 	return severity(c) <= 6
 }
 
-// Warnings are built HERE rather than in the renderer so a client that reads
-// only structuredContent sees them too.
+// Built here rather than in the renderer so a client reading only
+// structuredContent sees them too.
 func buildWarnings(cs []Container) []string {
 	var out []string
 	for _, c := range cs {
@@ -217,8 +212,8 @@ func buildWarnings(cs []Container) []string {
 				"%s exited with code %d%s", c.Name, c.ExitCode, exitCodeHint(c.ExitCode)))
 		}
 
-		// The one every listing hides: currently up, so `docker ps` calls it
-		// healthy, while it has been dying and restarting all along.
+		// The one every listing hides: up right now, so `docker ps` calls it
+		// healthy, while it has been dying all along.
 		if c.State == "running" && c.RestartCount >= restartWarnThreshold {
 			out = append(out, fmt.Sprintf(
 				"%s reads as running but has restarted %d times and has only been up "+
@@ -229,8 +224,7 @@ func buildWarnings(cs []Container) []string {
 	return out
 }
 
-// exitCodeHint names the two exit codes that mean something specific and are
-// routinely misread as application errors.
+// The two exit codes routinely misread as application errors.
 func exitCodeHint(code int) string {
 	switch code {
 	case 137:
@@ -244,9 +238,9 @@ func exitCodeHint(code int) string {
 
 // --- Docker API over the unix socket -------------------------------------
 //
-// The daemon speaks plain HTTP over a unix socket, so a stock net/http client
-// with a custom dialer reaches it. That avoids pulling the Docker SDK — an
-// enormous dependency tree — into a module with two direct dependencies.
+// The daemon speaks plain HTTP, so a stock net/http client with a custom dialer
+// reaches it — no need to pull the Docker SDK's dependency tree into a module
+// with two direct dependencies.
 
 type summary struct {
 	ID      string   `json:"Id"`
@@ -315,8 +309,8 @@ func newClient() (*http.Client, error) {
 	}, nil
 }
 
-// socketPath honours DOCKER_HOST so rootless installations, which put the
-// socket under $XDG_RUNTIME_DIR, work without configuration.
+// DOCKER_HOST is honoured so rootless installs, which put the socket under
+// $XDG_RUNTIME_DIR, work without configuration.
 func socketPath() string {
 	if h := os.Getenv("DOCKER_HOST"); strings.HasPrefix(h, "unix://") {
 		return strings.TrimPrefix(h, "unix://")
@@ -328,8 +322,8 @@ func get(ctx context.Context, client *http.Client, path string, out any) error {
 	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
 	defer cancel()
 
-	// The host in the URL is ignored — the dialer above always goes to the
-	// socket — but net/http still requires a syntactically valid one.
+	// The host is ignored (the dialer always goes to the socket) but net/http
+	// still requires a syntactically valid one.
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://docker"+path, nil)
 	if err != nil {
 		return err
@@ -448,8 +442,8 @@ func inspect(ctx context.Context, client *http.Client, s summary) Container {
 	return c
 }
 
-// collectPorts flattens Docker's port list, dropping the duplicate every
-// published mapping gets from being bound on both 0.0.0.0 and ::.
+// Drops the duplicate every published mapping gets from being bound on both
+// 0.0.0.0 and ::.
 func collectPorts(s summary) []Port {
 	seen := make(map[Port]bool, len(s.Ports))
 	out := make([]Port, 0, len(s.Ports))
@@ -463,8 +457,7 @@ func collectPorts(s summary) []Port {
 		out = append(out, port)
 	}
 
-	// Published ports first, then by number: what is reachable from outside is
-	// what the reader is looking for.
+	// Published first: what is reachable from outside is what is looked for.
 	slices.SortFunc(out, func(a, b Port) int {
 		if (a.HostPort == 0) != (b.HostPort == 0) {
 			if a.HostPort == 0 {
@@ -487,8 +480,8 @@ func collectPorts(s summary) []Port {
 	return out
 }
 
-// secondsSince parses a Docker RFC3339 timestamp. Docker writes the zero time
-// for events that never happened, which parses fine and must be discarded.
+// Docker writes the zero time for events that never happened, which parses
+// fine and must be discarded.
 func secondsSince(stamp string) uint64 {
 	t, err := time.Parse(time.RFC3339Nano, stamp)
 	if err != nil || t.IsZero() || t.Year() <= 1 {
@@ -501,8 +494,8 @@ func secondsSince(stamp string) uint64 {
 	return uint64(d.Seconds())
 }
 
-// describe rebuilds the one-line status in the spirit of `docker ps`, from the
-// structured fields rather than by parsing Docker's own prose.
+// describe rebuilds `docker ps`'s one-line status from the structured fields,
+// rather than parsing Docker's own prose.
 func describe(c Container) string {
 	var b strings.Builder
 	switch c.State {

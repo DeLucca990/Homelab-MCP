@@ -13,22 +13,15 @@ import (
 
 // DOCKER EXEC TOOL
 //
-// The only tool in this server that changes anything. Three independent layers
-// stand between the model and the container, and they fail in different
-// directions on purpose:
+// Three independent layers stand between the model and the container:
 //
-//  1. Allowlist — the server refuses any container not named in the
-//     HOMELAB_MCP_ALLOW_CONTAINER_NAMES environment variable, and the tool is not
-//     registered at all when that variable is empty. Nothing the model or the
-//     client does can widen this.
-//  2. Human confirmation — every execution is approved by the user first.
-//     Where the client supports it, the request comes from the server through
-//     the protocol (SEP-2322 input requests / elicitation), showing this exact
-//     command. Where it does not, the server defers to the approval prompt the
-//     client shows before calling any tool. See confirm.go for the trade.
-//  3. Fingerprint — when the server asked, the approved (container, command)
-//     pair is hashed into the request state and re-checked on the retry, so
-//     the command that runs is provably the one that was shown.
+//  1. Allowlist — HOMELAB_MCP_ALLOW_CONTAINER_NAMES, which nothing the model or
+//     the client does can widen. Empty means the tool is never registered.
+//  2. Human confirmation — every execution is approved first, by the server
+//     through the protocol where the client supports it and by the client's own
+//     prompt where it does not. See confirm.go for the trade.
+//  3. Fingerprint — the approved (container, command) pair is re-checked on the
+//     retry, so what runs is provably what was shown.
 
 type execInput struct {
 	Container      string   `json:"container" jsonschema:"name of the container to run the command in; must be in the server's exec allowlist"`
@@ -69,8 +62,7 @@ func handleExec(
 	}, out, nil
 }
 
-// confirmationMessage is what the user actually reads before deciding, so it
-// shows the command verbatim rather than summarising it.
+// Shows the command verbatim: this is what the user reads before deciding.
 func confirmationMessage(in execInput) string {
 	var b strings.Builder
 

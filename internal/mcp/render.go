@@ -6,17 +6,13 @@ import (
 	"time"
 )
 
-// Shared presentation helpers.
-//
-// Every tool here renders a fixed-width table, and each one used to carry its
-// own copy of the measure-then-write pass. Adding a column meant remembering to
-// widen an array literal in one file and not the others.
+// Presentation helpers shared by every tool.
 
 // emptyInput is the parameter type for tools that take no arguments.
 type emptyInput struct{}
 
-// ptr is needed for the optional-bool fields in sdk.ToolAnnotations, whose
-// defaults are true — a plain bool could not express "explicitly false".
+// ptr exists for the optional-bool fields in sdk.ToolAnnotations, whose
+// defaults are true — a plain bool cannot express "explicitly false".
 func ptr[T any](v T) *T { return new(v) }
 
 type alignment int
@@ -31,19 +27,15 @@ type column struct {
 	align alignment
 }
 
-// table renders rows under head, padding every column to its widest cell.
-//
-// The final column is never padded: trailing whitespace is invisible to a
-// reader and pure cost to a model, and the widest column is usually last
-// (a mountpoint, a port list) precisely because it does not need aligning.
-// Cells missing from a short row render blank rather than panicking.
+// table renders rows under head, padding every column to its widest cell. The
+// final column is never padded: trailing whitespace is invisible to a reader
+// and pure cost to a model. Cells missing from a short row render blank.
 func table(cols []column, rows [][]string) string {
 	if len(cols) == 0 {
 		return ""
 	}
 
-	// FIRST PASS: measure. There is no way to align the columns without first
-	// knowing the widest content in each one.
+	// Measure: columns cannot be aligned without knowing the widest cell.
 	width := make([]int, len(cols))
 	for i, c := range cols {
 		width[i] = len(c.head)
@@ -56,7 +48,6 @@ func table(cols []column, rows [][]string) string {
 		}
 	}
 
-	// SECOND PASS: write.
 	var b strings.Builder
 	write := func(cells []string) {
 		for i, c := range cols {
@@ -91,8 +82,8 @@ func table(cols []column, rows [][]string) string {
 	return b.String()
 }
 
-// compactDuration keeps an age column to a few characters — a table is no
-// place for "52h4m28.5s", which is what time.Duration would render.
+// Keeps an age column to a few characters — a table is no place for
+// "52h4m28.5s", which is what time.Duration renders.
 func compactDuration(seconds uint64) string {
 	if seconds == 0 {
 		return "-"

@@ -12,9 +12,8 @@ import (
 
 // DOCKER RESTART TOOL
 //
-// Same three layers as the exec tool — allowlist, per-call human confirmation,
-// and a fingerprint tying the approval to what runs — but on its own allowlist,
-// because restarting a service is a different grant from debugging inside it.
+// Same three layers as the exec tool: allowlist, per-call human confirmation,
+// and a fingerprint tying the approval to what runs.
 
 type restartInput struct {
 	Container          string `json:"container" jsonschema:"name of the container to restart; must be in the server's restart allowlist"`

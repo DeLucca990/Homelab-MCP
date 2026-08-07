@@ -9,21 +9,17 @@ import (
 )
 
 const (
-	// Seconds Docker waits for the container to stop gracefully before it
-	// sends SIGKILL. Docker's own default is 10.
+	// Grace period before SIGKILL. Docker's own default is 10.
 	defaultStopTimeout = 10
 	maxStopTimeout     = 120
 
-	// How long we keep checking that the container actually came back, and how
-	// often. Reporting "restarted" without confirming it is up would hide the
-	// exact failure an operator most needs to know about.
+	// How long, and how often, we keep checking that it actually came back.
 	settleTimeout  = 15 * time.Second
 	settleInterval = 500 * time.Millisecond
 
-	// A container is only called "back" after it has held running for this
-	// long. Docker reports "running" the instant the process is spawned, so
-	// checking once would pass a container that dies a second later — exactly
-	// the failure this tool exists to surface.
+	// A container counts as "back" only after holding running this long. Docker
+	// reports "running" the instant the process spawns, so a single check would
+	// pass one that dies a second later — the failure this tool exists to find.
 	minStableWindow = 3 * time.Second
 )
 
@@ -61,8 +57,8 @@ func Restart(ctx context.Context, name string, stopTimeout int) (RestartResult, 
 		return res, err
 	}
 
-	// Resolve the name through Docker's own listing so no caller-supplied
-	// string reaches a request path.
+	// Resolved against Docker's own listing, so no caller-supplied string
+	// reaches a request path.
 	summaries, err := listContainers(ctx, client)
 	if err != nil {
 		return res, err
@@ -76,7 +72,7 @@ func Restart(ctx context.Context, name string, stopTimeout int) (RestartResult, 
 
 	start := time.Now()
 
-	// Docker returns 204 with no body; post() already treats >= 300 as an error.
+	// 204 with no body; post() already treats >= 300 as an error.
 	body, err := post(ctx, client,
 		fmt.Sprintf("/containers/%s/restart?t=%d", id, stopTimeout), nil)
 	if err != nil {
@@ -102,8 +98,8 @@ func Restart(ctx context.Context, name string, stopTimeout int) (RestartResult, 
 }
 
 // waitUntilSettled polls until the container is running, or the settle window
-// expires. A container that crashes on boot is back in "restarting" or "exited"
-// within a second or two, and that is precisely the outcome worth reporting.
+// expires. One that crashes on boot is back in "restarting" or "exited" within
+// a second or two — precisely the outcome worth reporting.
 func waitUntilSettled(ctx context.Context, client *http.Client, id string) (state, health string, cameBack bool) {
 	deadline := time.Now().Add(settleTimeout)
 	var runningSince time.Time
@@ -125,16 +121,16 @@ func waitUntilSettled(ctx context.Context, client *http.Client, id string) (stat
 			if runningSince.IsZero() {
 				runningSince = time.Now()
 			}
-			// "starting" means the healthcheck has not reported yet; wait for a
-			// verdict rather than calling the restart good too early.
+			// "starting" means the healthcheck has not reported yet; wait for
+			// its verdict rather than calling the restart good too early.
 			if health != "starting" && time.Since(runningSince) >= minStableWindow {
 				return state, health, true
 			}
 		case "exited", "dead":
-			// It came up and fell over, or never came up at all.
+			// Came up and fell over, or never came up at all.
 			return state, health, false
 		default:
-			// created / restarting / paused — not up yet, so the clock restarts.
+			// created / restarting / paused — not up, so the clock restarts.
 			runningSince = time.Time{}
 		}
 

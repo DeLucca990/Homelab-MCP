@@ -39,10 +39,10 @@ type ExecResult struct {
 	TimedOut   bool  `json:"timed_out,omitempty"`
 }
 
-// Fingerprint identifies a specific (container, command) pair. It is carried
-// across the confirmation round trip so that what gets executed is provably the
-// same thing the user approved — approving `ls` and running `rm` would
-// otherwise be a matter of the retry carrying different arguments.
+// Fingerprint identifies a (container, command) pair across the confirmation
+// round trip, so what runs is provably what the user approved — otherwise
+// approving `ls` and running `rm` is just a matter of the retry carrying
+// different arguments.
 func Fingerprint(container string, command []string) string {
 	h := sha256.New()
 	h.Write([]byte(container))
@@ -53,12 +53,10 @@ func Fingerprint(container string, command []string) string {
 	return hex.EncodeToString(h.Sum(nil))[:32]
 }
 
-// Exec runs a command inside a container and returns its output.
-//
-// The command is an argv vector, never a shell string: Docker execs it
-// directly, so shell metacharacters have no meaning unless the caller
-// explicitly asks for a shell (["sh","-c",...]) — which then shows up verbatim
-// in the confirmation the user sees.
+// Exec runs a command inside a container and returns its output. The command is
+// an argv vector, never a shell string: Docker execs it directly, so shell
+// metacharacters mean nothing unless the caller asks for a shell explicitly
+// (["sh","-c",...]) — which then shows up verbatim in the confirmation.
 func Exec(ctx context.Context, container string, command []string, timeout time.Duration) (ExecResult, error) {
 	res := ExecResult{Container: container, Command: command}
 
@@ -82,8 +80,8 @@ func Exec(ctx context.Context, container string, command []string, timeout time.
 		return res, err
 	}
 
-	// Resolve the name against the daemon's own listing rather than putting a
-	// caller-supplied string in a request path.
+	// Resolved against the daemon's own listing, so no caller-supplied string
+	// reaches a request path.
 	summaries, err := listContainers(ctx, client)
 	if err != nil {
 		return res, err
@@ -151,13 +149,10 @@ func Exec(ctx context.Context, container string, command []string, timeout time.
 	return res, nil
 }
 
-// readFrames walks Docker's multiplexed stream. When a container runs without
-// a TTY, each frame is an 8-byte header — stream type, three padding bytes,
-// then a big-endian payload length — followed by that many bytes.
-//
-// The per-frame callback is what lets exec split the streams apart while the
-// log reader keeps them interleaved: both need the same framing, for opposite
-// reasons.
+// readFrames walks Docker's multiplexed stream: without a TTY, each frame is an
+// 8-byte header — stream type, three padding bytes, big-endian payload length —
+// followed by that many bytes. The callback is what lets exec split the streams
+// apart while the log reader keeps them interleaved.
 func readFrames(r io.Reader, limit int, fn func(stream byte, chunk []byte)) (truncated bool, err error) {
 	header := make([]byte, 8)
 	total := 0
@@ -200,8 +195,7 @@ func readFrames(r io.Reader, limit int, fn func(stream byte, chunk []byte)) (tru
 	}
 }
 
-// demux splits an exec stream into its two channels. Stream type 2 is stderr;
-// 1 (and anything else) is stdout.
+// Stream type 2 is stderr; 1 (and anything else) is stdout.
 func demux(r io.Reader, limit int) (stdout, stderr string, truncated bool, err error) {
 	var out, errOut bytes.Buffer
 
@@ -258,8 +252,6 @@ func post(ctx context.Context, client *http.Client, path string, body any) (io.R
 	return resp.Body, nil
 }
 
-// getJSON is the GET counterpart used by exec; the read-only collector has its
-// own helper with different error framing.
 func getJSON(ctx context.Context, client *http.Client, path string, out any) error {
 	return get(ctx, client, path, out)
 }

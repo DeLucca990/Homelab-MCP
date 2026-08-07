@@ -36,8 +36,8 @@ func renderServiceTable(status services.ServiceStatus) string {
 	var b strings.Builder
 
 	if len(status.Units) == 0 {
-		// An empty list is a result, not a failure — say so with the counts, so
-		// "nothing is broken" never reads as "the tool returned nothing".
+		// Said with the counts, so "nothing is broken" never reads as "the tool
+		// returned nothing".
 		fmt.Fprintf(&b, "no services needing attention (%d units, %d active, %d failed)\n",
 			status.TotalCount, status.ActiveCount, status.FailedCount)
 		return b.String()
@@ -66,8 +66,7 @@ func renderServiceTable(status services.ServiceStatus) string {
 
 	b.WriteString(table(cols, rows))
 
-	// Footer: what a plain status check would not tell you. Computed in the
-	// services package, so structuredContent carries these too.
+	// Footer: what a plain status check would not tell you.
 	for _, warn := range status.Warnings {
 		fmt.Fprintf(&b, "\nwarning: %s\n", warn)
 	}

@@ -12,10 +12,9 @@ import (
 
 // DOCKER LOGS TOOL
 //
-// Read-only, so no allowlist and no confirmation: it changes nothing. It exists
-// because the diagnostic tools stop one question short — knowing a container
-// was OOM-killed or is unhealthy is only useful if you can then read what it
-// said on the way down.
+// Read-only, so no allowlist and no confirmation. It exists because the status
+// tool stops one question short: knowing a container was OOM-killed is only
+// useful if you can then read what it said on the way down.
 type logsInput struct {
 	Container    string `json:"container" jsonschema:"name of the container to read logs from"`
 	Tail         int    `json:"tail,omitempty" jsonschema:"how many lines from the END of the log to return; default 100, maximum 2000"`
@@ -68,9 +67,8 @@ func renderLogs(r containers.LogsResult) string {
 	return b.String()
 }
 
-// compactTimestamp trims the nanoseconds off docker's RFC3339 log prefix.
-// `2026-08-07T20:41:32.123456789Z` becomes `2026-08-07T20:41:32Z` — the same
-// information for a reader, at two thirds the width, on every single line.
+// Trims the nanoseconds off docker's RFC3339 log prefix: same information for
+// a reader, at two thirds the width, on every single line.
 func compactTimestamp(line string) string {
 	stamp, rest, found := strings.Cut(line, " ")
 	if !found || len(stamp) < 20 || stamp[4] != '-' || stamp[10] != 'T' {

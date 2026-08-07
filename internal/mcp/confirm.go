@@ -10,25 +10,17 @@ import (
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// The human-in-the-loop round trip shared by every state-changing tool.
-//
-// This lives in one place deliberately. It is the security boundary of the
-// whole server, and the failure mode of duplicating it is silent: a fix applied
-// to one copy and missed in the other leaves a tool that skips the fingerprint
-// check or mishandles a dismissal, and nothing about the code looks wrong.
+// The human-in-the-loop round trip shared by every state-changing tool. It is
+// the security boundary of the whole server, so it lives in exactly one place:
+// a fix applied to one copy and missed in another would fail silently.
 
-// confirmKey is the id under which the approval travels. Servers assign these
-// themselves and there is only ever one outstanding
 const confirmKey = "confirm"
 
-// trustClientEnv states that the client connecting to this server prompts the
-// user itself, so the server may act without a confirmation of its own.
-//
-// This is the operator vouching for their setup, which is the only form the
-// statement can honestly take: the identity a client reports at initialize is
-// self-declared and unauthenticated, so a server cannot recognise a trustworthy
-// client — it can only be told. With this unset, a client the server cannot
-// question gets refused.
+// trustClientEnv is the operator vouching that their client prompts before
+// calling a tool, so this server may act without a confirmation of its own.
+// It has to be the operator: the identity a client reports at initialize is
+// self-declared, so a server cannot recognise a trustworthy client, only be
+// told. Unset, a client the server cannot question gets refused.
 const trustClientEnv = "HOMELAB_MCP_TRUST_CLIENT_CONFIRMATION"
 
 func trustClientConfirmation() bool {
@@ -39,9 +31,8 @@ func trustClientConfirmation() bool {
 	return false
 }
 
-// These take the session rather than a request because the two callers hold
-// different request types — a tool call and an initialize notification — over
-// the same session. Keyed on the session, one implementation serves both.
+// These three take a session rather than a request: the callers hold different
+// request types — a tool call and an initialize notification — over one session.
 
 // clientCanConfirm reports whether the client declared a channel the server can
 // use to reach the user. Without it, an input request cannot be fulfilled.
@@ -50,11 +41,8 @@ func clientCanConfirm(ss *sdk.ServerSession) bool {
 	return params != nil && params.Capabilities != nil && params.Capabilities.Elicitation != nil
 }
 
-// clientName is what the client called itself at initialize, or "" if it said
-// nothing. Nothing branches on it — it is self-declared, so it could not carry
-// a decision honestly. It exists so the log and the refusal message can name
-// who was on the other end, which is the first thing you need when either one
-// surprises you.
+// clientName is for the log and the refusal message only. Nothing branches on
+// it: it is self-declared, so it could not carry a decision honestly.
 func clientName(ss *sdk.ServerSession) string {
 	if params := initParams(ss); params != nil && params.ClientInfo != nil {
 		return params.ClientInfo.Name
@@ -69,10 +57,9 @@ func initParams(ss *sdk.ServerSession) *sdk.InitializeParams {
 	return ss.InitializeParams()
 }
 
-// logClientIdentity records who connected and which confirmation mechanism will
-// apply for the session. Both are decided at connect time and are invisible
-// everywhere else: a refusal further on otherwise looks arbitrary, and an
-// action taken on the client's own approval leaves no trace of who approved it.
+// logClientIdentity records which confirmation mechanism the session got. It is
+// decided at connect time and invisible everywhere else, so without this line a
+// refusal further on looks arbitrary.
 func logClientIdentity(_ context.Context, req *sdk.InitializedRequest) {
 	confirmation := "the client's own approval prompt"
 	if clientCanConfirm(req.Session) {
@@ -85,43 +72,34 @@ func logClientIdentity(_ context.Context, req *sdk.InitializedRequest) {
 
 // approval describes one thing the user is being asked to approve.
 type approval struct {
-	// message is what the user reads. It should state the action verbatim
-	// rather than summarising it — this is the last point at which a human can
-	// tell the difference between what was asked for and what will happen.
+	// What the user reads. States the action verbatim rather than summarising
+	// it: this is the last point at which a human can tell the two apart.
 	message string
 
-	// fingerprint identifies the exact operation. It is carried across the
-	// round trip and re-checked, so an approval cannot be reused for different
-	// arguments.
+	// Identifies the exact operation. Carried across the round trip and
+	// re-checked, so an approval cannot be reused for different arguments.
 	fingerprint string
 
-	// refusal prefixes the error when the action does not happen, e.g.
-	// "command not run". Phrased so the model reports what did NOT occur.
+	// Prefixes the error when the action does not happen, e.g. "command not
+	// run". Phrased so the model reports what did NOT occur.
 	refusal string
 
-	// subject names the operation for the server's own log, e.g.
-	// "restart radarr". Every state-changing call leaves a line, which is the
-	// only record of what this server did once the conversation is gone.
+	// Names the operation in the server's log, e.g. "restart radarr" — the only
+	// record of what this server did once the conversation is gone.
 	subject string
 }
 
-// requireApproval drives the confirmation round trip.
-//
-// It returns (false, pending, nil) on the first pass, where pending is the
-// result the handler must return to ask the user; (false, nil, err) when the
-// action must not proceed; and (true, nil, nil) once the user has approved
-// this exact operation.
+// requireApproval drives the confirmation round trip. It returns
+// (false, pending, nil) on the first pass, where pending is the result the
+// handler must return to ask the user; (false, nil, err) when the action must
+// not proceed; and (true, nil, nil) once the user has approved this exact
+// operation.
 func requireApproval(req *sdk.CallToolRequest, a approval) (bool, *sdk.CallToolResult, error) {
-	// Some clients — Claude Desktop among them at the time of writing — do not
-	// declare the elicitation capability, so the server has no channel of its
-	// own to reach the user. Those clients prompt for tool approval themselves,
-	// so the human is still in the loop; the approval simply comes from the
-	// client rather than from here.
-	//
-	// We defer to it rather than refusing. The trade is real and worth stating:
-	// the client's prompt is per-tool where ours is per-command, and a client
-	// configured to always-allow stops asking. What still holds either way is
-	// the allowlist, which no client can widen.
+	// A client that declares no elicitation capability (Claude Desktop, at the
+	// time of writing) leaves the server no channel of its own to reach the
+	// user, so we defer to the approval prompt it shows before calling a tool.
+	// The trade: that prompt is per-tool where ours is per-command, and a
+	// client set to always-allow stops asking. The allowlist holds either way.
 	if len(req.Params.InputResponses) == 0 && !clientCanConfirm(req.Session) {
 		if !trustClientConfirmation() {
 			return false, nil, fmt.Errorf(
@@ -138,8 +116,7 @@ func requireApproval(req *sdk.CallToolRequest, a approval) (bool, *sdk.CallToolR
 		return true, nil, nil
 	}
 
-	// FIRST PASS: nothing has been approved yet. Describe what would happen and
-	// hand the decision to the user.
+	// First pass: describe what would happen and hand the decision over.
 	if len(req.Params.InputResponses) == 0 {
 		return false, &sdk.CallToolResult{
 			InputRequests: sdk.InputRequestMap{
@@ -149,8 +126,7 @@ func requireApproval(req *sdk.CallToolRequest, a approval) (bool, *sdk.CallToolR
 		}, nil
 	}
 
-	// SECOND PASS: an answer came back. Anything short of an explicit accept
-	// stops here.
+	// Second pass: anything short of an explicit accept stops here.
 	resp, ok := req.Params.InputResponses[confirmKey]
 	if !ok {
 		return false, nil, fmt.Errorf("%s: no confirmation was returned", a.refusal)
@@ -171,9 +147,7 @@ func requireApproval(req *sdk.CallToolRequest, a approval) (bool, *sdk.CallToolR
 		return false, nil, fmt.Errorf("%s: unrecognised confirmation action %q", a.refusal, result.Action)
 	}
 
-	// The user approved a specific operation. Verify it is still the one being
-	// asked for: the retry carries its own parameters, and they must match what
-	// was shown.
+	// The retry carries its own parameters, which must still be the ones shown.
 	if req.Params.RequestState != a.fingerprint {
 		return false, nil, fmt.Errorf(
 			"%s: the approved operation does not match the one submitted", a.refusal)

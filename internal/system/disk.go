@@ -22,13 +22,13 @@ type DiskUsage struct {
 	FreeBytes   uint64  `json:"free_bytes"`
 	UsedPercent float64 `json:"used_percent"`
 
-	// Inodes can run out independently of space. See the note below.
+	// Inodes can run out independently of space.
 	InodesTotal       uint64  `json:"inodes_total,omitempty"`
 	InodesUsed        uint64  `json:"inodes_used,omitempty"`
 	InodesUsedPercent float64 `json:"inodes_used_percent,omitempty"`
 
-	// Filled in when the query for THIS mountpoint failed,
-	// without invalidating the others.
+	// Set when the query for THIS mountpoint failed, without invalidating
+	// the others.
 	Error string `json:"error,omitempty"`
 }
 
@@ -38,8 +38,7 @@ type DiskStats struct {
 	Warnings     []string    `json:"warnings,omitempty"`
 }
 
-// Filesystem types that never represent real storage the user would
-// care about monitoring.
+// Filesystem types that never represent real storage worth monitoring.
 var ignoredFstypes = map[string]bool{
 	"squashfs": true, "tmpfs": true, "devtmpfs": true, "overlay": true,
 	"ramfs": true, "autofs": true, "iso9660": true, "fusectl": true,
@@ -53,8 +52,7 @@ var ignoredPrefixes = []string{
 	"/snap/", "/var/lib/docker/", "/var/lib/containers/", "/var/lib/kubelet/",
 }
 
-// Above this inode percentage we warn explicitly — it is the kind of
-// problem that `df -h` hides completely.
+// Above this inode percentage we warn explicitly: `df -h` hides it completely.
 const inodeWarnThreshold = 80.0
 
 func GetDiskStats(ctx context.Context, includeAll bool) (DiskStats, error) {
@@ -76,10 +74,8 @@ func GetDiskStats(ctx context.Context, includeAll bool) (DiskStats, error) {
 		selected = append(selected, p)
 	}
 
-	// We pre-allocate the slice at its final size. Each goroutine writes
-	// EXCLUSIVELY to its own index, so there is no concurrent write to the
-	// same address — which is why no mutex is needed.
-	// This is the idiomatic "parallel map" pattern in Go.
+	// One goroutine per mountpoint, each writing to its own index: statfs on a
+	// dead network mount is slow, and serially they would add up.
 	results := make([]DiskUsage, len(selected))
 
 	var wg sync.WaitGroup
@@ -106,10 +102,9 @@ func GetDiskStats(ctx context.Context, includeAll bool) (DiskStats, error) {
 		}
 	})
 
-	// Warnings are derived HERE, not in the renderer. A client that reads only
-	// structuredContent must see them too — an inode warning that exists only
-	// in the rendered table is invisible to half the protocol.
-	// Built after the sort so their order matches the table's.
+	// Built here rather than in the renderer so a client reading only
+	// structuredContent sees them too, and after the sort so their order
+	// matches the table's.
 	for _, fs := range stats.Filesystems {
 		if fs.Error != "" {
 			stats.Warnings = append(stats.Warnings,
@@ -139,8 +134,8 @@ func isInteresting(p disk.PartitionStat, seen map[string]bool) bool {
 			return false
 		}
 	}
-	// Bind mounts and subvolumes make the same device show up several
-	// times with the same space. We keep the first occurrence.
+	// Bind mounts and subvolumes repeat the same device with the same space;
+	// keep the first occurrence.
 	if p.Device != "" && p.Device != "none" {
 		if seen[p.Device] {
 			return false
@@ -175,24 +170,17 @@ func usageFor(ctx context.Context, p disk.PartitionStat) DiskUsage {
 	return u
 }
 
-// disk.Usage performs the statfs syscall. On a network mount (NFS, SMB,
-// SSHFS) whose server is down, that syscall can hang for MINUTES.
-//
-// And it does NOT honor context cancellation: what is stuck is the kernel,
-// not the Go code. Passing ctx accomplishes nothing.
-//
-// The way out is to abandon the WAIT without being able to abandon the
-// goroutine.
+// disk.Usage performs statfs, which on a network mount (NFS, SMB, SSHFS) whose
+// server is down can hang for MINUTES and does not honour ctx — what is stuck
+// is the kernel, not the Go code. So we abandon the wait, not the goroutine.
 func usageWithTimeout(ctx context.Context, path string, timeout time.Duration) (*disk.UsageStat, error) {
 	type result struct {
 		stat *disk.UsageStat
 		err  error
 	}
 
-	// A buffer of size 1 is ESSENTIAL. If the channel were unbuffered and
-	// we had already given up on the timeout, the goroutine would block
-	// forever trying to send — a permanent leak. With the buffer, it drops
-	// off the result, nobody reads it, and the GC collects everything later.
+	// Buffered so the abandoned goroutine can send and exit instead of
+	// blocking forever on a receiver that gave up.
 	ch := make(chan result, 1)
 
 	go func() {

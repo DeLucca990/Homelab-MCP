@@ -10,10 +10,8 @@ import (
 )
 
 const (
-	// Logs are capped like every other payload here. Because the default is to
-	// read from the TAIL, what gets dropped on a very chatty container is the
-	// oldest of the requested lines — the opposite end from where the useful
-	// part of a log usually is.
+	// Reading from the TAIL means a chatty container loses the oldest of the
+	// requested lines — the opposite end from where the useful part usually is.
 	maxLogBytes = 16384
 
 	defaultTailLines = 100
@@ -34,11 +32,9 @@ type LogsResult struct {
 	Warnings []string `json:"warnings,omitempty"`
 }
 
-// GetLogs returns what the container has written to stdout and stderr.
-//
-// This is deliberately not reachable through exec: most images log to stdout,
-// which the daemon captures and which therefore exists nowhere in the
-// container's own filesystem. `tail` inside the container would find nothing.
+// GetLogs returns what the container wrote to stdout and stderr. Deliberately
+// not left to exec: the daemon captures stdout, so it exists nowhere in the
+// container's own filesystem and `tail` inside it would find nothing.
 func GetLogs(ctx context.Context, name string, tail, sinceSeconds int, timestamps bool) (LogsResult, error) {
 	res := LogsResult{Container: name}
 
@@ -56,8 +52,8 @@ func GetLogs(ctx context.Context, name string, tail, sinceSeconds int, timestamp
 		return res, err
 	}
 
-	// Resolve the name against Docker's own listing so no caller-supplied
-	// string reaches a request path.
+	// Resolved against Docker's own listing, so no caller-supplied string
+	// reaches a request path.
 	summaries, err := listContainers(ctx, client)
 	if err != nil {
 		return res, err
@@ -68,8 +64,8 @@ func GetLogs(ctx context.Context, name string, tail, sinceSeconds int, timestamp
 	}
 	id := matched[0].ID
 
-	// Whether the stream is framed depends on how the container was created,
-	// not on this request: with a TTY docker sends raw bytes instead.
+	// Framing depends on how the container was created, not on this request:
+	// with a TTY docker sends raw bytes instead.
 	var info inspectResult
 	if err := get(ctx, client, "/containers/"+id+"/json", &info); err != nil {
 		return res, err
@@ -101,8 +97,8 @@ func GetLogs(ctx context.Context, name string, tail, sinceSeconds int, timestamp
 			res.Truncated = true
 		}
 	} else {
-		// Framed stream: keep stdout and stderr interleaved, because for a log
-		// the order between them is the diagnosis.
+		// Framed: keep stdout and stderr interleaved — for a log, the order
+		// between them is the diagnosis.
 		res.Truncated, err = readFrames(body, maxLogBytes, func(_ byte, chunk []byte) {
 			buf.Write(chunk)
 		})

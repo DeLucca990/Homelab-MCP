@@ -16,7 +16,7 @@ func main() {
 	log.SetOutput(os.Stderr)
 	log.SetPrefix("[homelab-mcp] ")
 
-	// Cancel context when receive Ctrl+C or SIGTERM (systemd)
+	// Cancelled on Ctrl+C or SIGTERM (systemd).
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -25,8 +25,8 @@ func main() {
 	log.Println("MCP server running on transport stdio")
 
 	if err := server.Run(ctx, &sdk.StdioTransport{}); err != nil {
-		log.Fatalf("server stop with error: %v", err)
+		log.Fatalf("server stopped with error: %v", err)
 	}
 
-	log.Println("server stoped")
+	log.Println("server stopped")
 }

@@ -82,9 +82,8 @@ func registerTools(s *sdk.Server) {
 	registerRestartTool(s)
 }
 
-// registerRestartTool is registered only when its own allowlist is configured —
-// separate from exec's, because restarting a service and debugging inside one
-// are different grants.
+// Registered only when the allowlist is configured: the model cannot call a
+// tool that does not exist.
 func registerRestartTool(s *sdk.Server) {
 	allowed := containers.ActionAllowlist()
 	if len(allowed) == 0 {

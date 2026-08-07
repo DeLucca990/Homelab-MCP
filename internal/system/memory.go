@@ -7,9 +7,8 @@ import (
 	"github.com/shirou/gopsutil/v4/mem"
 )
 
-// Sizes are raw byte counts. The `_bytes` suffix carries the unit so the
-// numbers need no human-readable companion field — the tool renders that
-// once, in text, instead of duplicating every value in the JSON.
+// Sizes are raw byte counts: the `_bytes` suffix carries the unit, so no field
+// needs a human-readable twin. The tool renders that once, in text.
 type MemoryStats struct {
 	TotalBytes       uint64  `json:"total_bytes"`
 	AvailableBytes   uint64  `json:"available_bytes" jsonschema:"memory a new application could allocate without swapping — this is the number that indicates memory pressure"`
@@ -24,8 +23,7 @@ type MemoryStats struct {
 
 	Swap SwapStats `json:"swap"`
 
-	// Partial collections are reported here instead of silently
-	// returning zero.
+	// Partial collections say so here instead of silently returning zero.
 	Warnings []string `json:"warnings,omitempty"`
 }
 
@@ -53,9 +51,8 @@ func GetMemoryStats(ctx context.Context) (MemoryStats, error) {
 		BuffCacheBytes: vm.Buffers + vm.Cached + vm.Sreclaimable,
 	}
 
-	// We compute the percentages ourselves instead of using vm.UsedPercent:
-	// the definition of that field has changed across gopsutil versions, and
-	// here we want the guarantee that "used" means "total minus available".
+	// Computed rather than taken from vm.UsedPercent, whose definition has
+	// shifted across gopsutil versions. Here "used" means total minus available.
 	if vm.Total > 0 {
 		used := vm.Total - vm.Available
 		stats.UsedBytes = used
@@ -66,12 +63,11 @@ func GetMemoryStats(ctx context.Context) (MemoryStats, error) {
 	sw, err := mem.SwapMemoryWithContext(ctx)
 	switch {
 	case err != nil:
-		// A failure reading swap doesn't invalidate the RAM data — report it
-		// and carry on.
+		// Does not invalidate the RAM data — report it and carry on.
 		stats.Warnings = append(stats.Warnings,
 			"could not read swap statistics: "+err.Error())
 	case sw.Total == 0:
-		// No swap is a valid configuration, not an error.
+		// A valid configuration, not an error.
 		stats.Swap.Configured = false
 	default:
 		stats.Swap = SwapStats{
