@@ -51,4 +51,16 @@ func registerTools(s *sdk.Server) {
 			"crash-looping — the latter reads as active in any point-in-time check. " +
 			"Linux only; errors on hosts without systemd.",
 	}, handleServiceStatus)
+
+	// docker containers tool
+	sdk.AddTool(s, &sdk.Tool{
+		Name: "docker_container_status",
+		Description: "Returns the state of Docker containers, worst first. By default it " +
+			"reports running containers plus anything broken, and hides containers that " +
+			"stopped cleanly; pass 'names' to ask about specific ones. Beyond what " +
+			"'docker ps' shows, it reports healthcheck results, restart counts, exit codes, " +
+			"and whether a container was killed by the OOM killer for exceeding its memory " +
+			"limit — the usual cause of a container that keeps dying for no visible reason. " +
+			"Requires access to the docker socket.",
+	}, handleContainerStatus)
 }

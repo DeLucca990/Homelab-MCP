@@ -16,6 +16,7 @@ of disk?"* instead of SSH-ing in to run `df -h`.
 | `system_memory_stats` | — | RAM and swap usage, with `available` and `used_percent` as the pressure signals |
 | `system_disk_usage` | `include_all` (optional, default `false`) | disk usage per mountpoint, fullest first, plus inode usage |
 | `system_service_status` | `units` (optional), `include_all` (optional, default `false`) | systemd service state — failed, stuck starting, or crash-looping units, worst first |
+| `docker_container_status` | `names` (optional), `include_all` (optional, default `false`) | Docker container state — OOM kills, crash loops, failing healthchecks, worst first |
 
 Every tool returns both a compact text rendering and structured JSON, so a client can use the
 table or the raw numbers. Sizes in the JSON are plain byte counts on `*_bytes` fields; the
@@ -32,6 +33,9 @@ Details the tools handle that a plain `df -h` / `free -h` / `systemctl status` w
   point-in-time check. `system_service_status` reports the restart count and how long the unit
   has actually held its current state, so "up" and "up for 9 seconds after 800 restarts" are
   told apart — and it names the reason systemd recorded, including OOM kills.
+- **Containers killed for their memory limit.** `docker ps` shows a container that exceeded its
+  limit as `Exited (137)`, which reads like an application error. `docker_container_status`
+  reports the OOM flag directly, alongside healthcheck results and restart counts.
 
 ## What it can and cannot do
 
@@ -39,8 +43,9 @@ Details the tools handle that a plain `df -h` / `free -h` / `systemctl status` w
 anything — the server observes and reports.
 
 Most data comes from reading the kernel through [gopsutil](https://github.com/shirou/gopsutil).
-The one exception is `system_service_status`, which invokes `systemctl`. Two properties bound
-what that can do:
+Two tools reach further, and each is bounded:
+
+**`system_service_status`** invokes `systemctl`:
 
 - **No shell.** The binary is executed through `execve` with an argument vector, not through
   `sh -c`. Shell metacharacters in any input are inert — there is no string a caller can supply
@@ -50,8 +55,19 @@ what that can do:
   against systemd's own naming rules before execution, so an argument cannot be smuggled in as
   an option (`systemctl --host=…` would otherwise open an outbound SSH connection).
 
+**`docker_container_status`** talks to the Docker daemon over its unix socket:
+
+- **Read-only endpoints only.** It issues `GET /containers/json` and `GET /containers/{id}/json`.
+  Nothing starts, stops, or removes a container.
+- **No caller-supplied string reaches a request path.** Filtering by name is applied to the
+  listing in Go; every container id interpolated into a URL came from Docker itself.
+- Note that the docker socket is root-equivalent by design. This tool only reads through it,
+  but anything that can reach that socket can control the daemon — so grant access to it the
+  same way you would grant root.
+
 The server runs with the privileges of whoever launches it, which is normally your MCP client,
-not root. Read-only tools need no elevation.
+not root. The read-only system tools need no elevation; Docker access requires membership in
+the `docker` group.
 
 ## Requirements
 
@@ -197,6 +213,25 @@ On a healthy host it answers plainly rather than returning an empty list:
 
 ```
 no services needing attention (41 units, 11 active, 0 failed)
+```
+
+`docker_container_status`:
+
+```
+NAME       IMAGE   STATE         HEALTH     RESTARTS  FOR
+jellyfin   alpine  exited (OOM)  -                 0  2m
+sonarr     alpine  restarting    -                11  34s
+radarr     alpine  running       unhealthy         0  2m
+nginx      alpine  running       healthy           0  2m
+
+warning: jellyfin was killed for exceeding its memory limit (20M) — raise the limit or fix the leak
+
+warning: sonarr is restarting right now (11 restarts so far) — it is in a crash loop
+
+warning: radarr is running but its healthcheck is failing (67 consecutive failures) —
+the process is up while the service behind it is not
+
+(6 cleanly-stopped containers omitted; use include_all to see them)
 ```
 
 ## Project layout
