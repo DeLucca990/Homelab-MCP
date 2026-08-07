@@ -11,7 +11,7 @@ import (
 )
 
 type diskInput struct {
-	IncludeAll bool `json:"include_all,omitempty" jsonschema:"se true, inclui pseudo-filesystems, snaps e montagens duplicadas que normalmente são filtrados"`
+	IncludeAll bool `json:"include_all,omitempty" jsonschema:"if true, includes pseudo-filesystems, snaps and duplicate mounts that are normally filtered out"`
 }
 
 func handleDiskStats(
@@ -36,7 +36,7 @@ const inodeWarnThreshold = 80.0
 
 func renderDiskTable(stats system.DiskStats) string {
 	if len(stats.Filesystems) == 0 {
-		return "nenhum sistema de arquivos encontrado\n"
+		return "no filesystem found\n"
 	}
 
 	type row struct{ fs, size, used, avail, pct, mount string }
@@ -96,17 +96,17 @@ func renderDiskTable(stats system.DiskStats) string {
 	// Footer: what df -h would not tell you.
 	for _, f := range stats.Filesystems {
 		if f.InodesUsedPercent >= inodeWarnThreshold {
-			fmt.Fprintf(&b, "\naviso: %s está com %.0f%% dos inodes em uso "+
-				"(%d de %d) — pode falhar com \"no space left on device\" "+
-				"mesmo com espaço livre\n",
+			fmt.Fprintf(&b, "\nwarning: %s is at %.0f%% inode usage "+
+				"(%d of %d) — it can fail with \"no space left on device\" "+
+				"even with free space\n",
 				f.Mountpoint, f.InodesUsedPercent, f.InodesUsed, f.InodesTotal)
 		}
 	}
 	for _, warn := range stats.Warnings {
-		fmt.Fprintf(&b, "\naviso: %s\n", warn)
+		fmt.Fprintf(&b, "\nwarning: %s\n", warn)
 	}
 	if stats.SkippedCount > 0 {
-		fmt.Fprintf(&b, "\n(%d montagens filtradas; use include_all para vê-las)\n",
+		fmt.Fprintf(&b, "\n(%d mounts filtered out; use include_all to see them)\n",
 			stats.SkippedCount)
 	}
 

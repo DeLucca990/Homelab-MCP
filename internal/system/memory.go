@@ -18,13 +18,13 @@ func newBytes(b uint64) Bytes {
 
 type MemoryStats struct {
 	Total            Bytes   `json:"total"`
-	Available        Bytes   `json:"available" jsonschema:"memória que uma nova aplicação conseguiria alocar sem swap — este é o número que indica pressão de memória"`
-	Used             Bytes   `json:"used" jsonschema:"total menos disponível; exclui cache recuperável"`
-	Free             Bytes   `json:"free" jsonschema:"RAM intocada; normalmente baixa mesmo em servidores saudáveis, pois o kernel usa a sobra como cache"`
-	Cached           Bytes   `json:"cached" jsonschema:"page cache, recuperável instantaneamente sob demanda"`
+	Available        Bytes   `json:"available" jsonschema:"memory a new application could allocate without swapping — this is the number that indicates memory pressure"`
+	Used             Bytes   `json:"used" jsonschema:"total minus available; excludes reclaimable cache"`
+	Free             Bytes   `json:"free" jsonschema:"untouched RAM; usually low even on healthy servers, since the kernel uses the leftovers as cache"`
+	Cached           Bytes   `json:"cached" jsonschema:"page cache, instantly reclaimable on demand"`
 	Buffers          Bytes   `json:"buffers"`
 	Shared           Bytes   `json:"shared"`
-	BuffCache        Bytes   `json:"buff_cache" jsonschema:"buffers + cached + slab recuperável; é a coluna buff/cache do free"`
+	BuffCache        Bytes   `json:"buff_cache" jsonschema:"buffers + cached + reclaimable slab; this is free's buff/cache column"`
 	UsedPercent      float64 `json:"used_percent"`
 	AvailablePercent float64 `json:"available_percent"`
 
@@ -46,7 +46,7 @@ type SwapStats struct {
 func GetMemoryStats(ctx context.Context) (MemoryStats, error) {
 	vm, err := mem.VirtualMemoryWithContext(ctx)
 	if err != nil {
-		return MemoryStats{}, fmt.Errorf("lendo memória virtual: %w", err)
+		return MemoryStats{}, fmt.Errorf("reading virtual memory: %w", err)
 	}
 
 	stats := MemoryStats{
@@ -75,7 +75,7 @@ func GetMemoryStats(ctx context.Context) (MemoryStats, error) {
 		// A failure reading swap doesn't invalidate the RAM data — report it
 		// and carry on.
 		stats.Warnings = append(stats.Warnings,
-			"não foi possível ler estatísticas de swap: "+err.Error())
+			"could not read swap statistics: "+err.Error())
 	case sw.Total == 0:
 		// No swap is a valid configuration, not an error.
 		stats.Swap.Configured = false

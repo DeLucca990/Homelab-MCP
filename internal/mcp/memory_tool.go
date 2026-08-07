@@ -72,7 +72,7 @@ func renderMemoryTable(s system.MemoryStats) string {
 	}
 
 	for _, w := range s.Warnings {
-		fmt.Fprintf(&b, "\naviso: %s\n", w)
+		fmt.Fprintf(&b, "\nwarning: %s\n", w)
 	}
 
 	return b.String()

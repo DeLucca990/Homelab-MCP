@@ -34,7 +34,7 @@ type DiskUsage struct {
 
 type DiskStats struct {
 	Filesystems  []DiskUsage `json:"filesystems"`
-	SkippedCount int         `json:"skipped_count" jsonschema:"pontos de montagem descartados por serem pseudo-filesystems, snaps ou duplicatas"`
+	SkippedCount int         `json:"skipped_count" jsonschema:"mountpoints discarded for being pseudo-filesystems, snaps or duplicates"`
 	Warnings     []string    `json:"warnings,omitempty"`
 }
 
@@ -56,7 +56,7 @@ var ignoredPrefixes = []string{
 func GetDiskStats(ctx context.Context, includeAll bool) (DiskStats, error) {
 	parts, err := disk.PartitionsWithContext(ctx, includeAll)
 	if err != nil {
-		return DiskStats{}, fmt.Errorf("listando pontos de montagem: %w", err)
+		return DiskStats{}, fmt.Errorf("listing mountpoints: %w", err)
 	}
 
 	var (
@@ -191,8 +191,8 @@ func usageWithTimeout(ctx context.Context, path string, timeout time.Duration) (
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case <-time.After(timeout):
-		return nil, fmt.Errorf("timeout de %s ao consultar o ponto de montagem "+
-			"(montagem de rede indisponível?)", timeout)
+		return nil, fmt.Errorf("timeout of %s while querying the mountpoint "+
+			"(network mount unavailable?)", timeout)
 	}
 }
 

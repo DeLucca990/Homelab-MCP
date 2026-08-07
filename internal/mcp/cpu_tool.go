@@ -13,7 +13,7 @@ import (
 
 // CPU TOOL
 type coreUsageInput struct {
-	SampleMS int `json:"sample_ms,omitempty" jsonschema:"janela de amostragem em milissegundos; padrão 500, máximo 5000"`
+	SampleMS int `json:"sample_ms,omitempty" jsonschema:"sampling window in milliseconds; default 500, maximum 5000"`
 }
 
 type coreUsageOutput struct {

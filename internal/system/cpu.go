@@ -43,7 +43,7 @@ func GetCoreUsage(ctx context.Context, interval time.Duration) ([]CoreUsage, err
 
 	before, err := cpu.TimesWithContext(ctx, true)
 	if err != nil {
-		return nil, fmt.Errorf("primeira leitura de /proc/stat: %w", err)
+		return nil, fmt.Errorf("first read of /proc/stat: %w", err)
 	}
 
 	// WARNING: time.Sleep IGNORES context cancellation.
@@ -57,11 +57,11 @@ func GetCoreUsage(ctx context.Context, interval time.Duration) ([]CoreUsage, err
 
 	after, err := cpu.TimesWithContext(ctx, true)
 	if err != nil {
-		return nil, fmt.Errorf("segunda leitura de /proc/stat: %w", err)
+		return nil, fmt.Errorf("second read of /proc/stat: %w", err)
 	}
 
 	if len(before) != len(after) {
-		return nil, fmt.Errorf("número de núcleos mudou entre as leituras (%d -> %d)",
+		return nil, fmt.Errorf("core count changed between reads (%d -> %d)",
 			len(before), len(after))
 	}
 
