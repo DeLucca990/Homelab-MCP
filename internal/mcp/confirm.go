@@ -31,6 +31,15 @@ func trustClientConfirmation() bool {
 	return false
 }
 
+// A schema with no properties: the confirmation asks for a decision, not for
+// input. Built per call rather than shared, so no request can mutate it.
+func emptyElicitSchema() map[string]any {
+	return map[string]any{
+		"type":       "object",
+		"properties": map[string]any{},
+	}
+}
+
 // These three take a session rather than a request: the callers hold different
 // request types — a tool call and an initialize notification — over one session.
 
@@ -120,7 +129,10 @@ func requireApproval(req *sdk.CallToolRequest, a approval) (bool, *sdk.CallToolR
 	if len(req.Params.InputResponses) == 0 {
 		return false, &sdk.CallToolResult{
 			InputRequests: sdk.InputRequestMap{
-				confirmKey: &sdk.ElicitParams{Message: a.message},
+				confirmKey: &sdk.ElicitParams{
+					Message:         a.message,
+					RequestedSchema: emptyElicitSchema(),
+				},
 			},
 			RequestState: a.fingerprint,
 		}, nil
