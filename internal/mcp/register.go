@@ -11,13 +11,21 @@ import (
 func registerTools(s *sdk.Server) {
 	// system host tool
 	sdk.AddTool(s, &sdk.Tool{
-		Name:        "system_host_info",
+		Name: "system_host_info",
+		Annotations: &sdk.ToolAnnotations{
+			Title:        "System Host Info",
+			ReadOnlyHint: true,
+		},
 		Description: "Returns general server information: hostname, operating system, kernel version, architecture and uptime.",
 	}, handleHostInfo)
 
 	// system cpu cores
 	sdk.AddTool(s, &sdk.Tool{
 		Name: "system_cpu_cores",
+		Annotations: &sdk.ToolAnnotations{
+			Title:        "System CPU Cores",
+			ReadOnlyHint: true,
+		},
 		Description: "Returns the detailed usage of each CPU core individually, " +
 			"broken down into user, kernel, nice, interrupt and I/O wait time — " +
 			"the same breakdown htop shows per core. Takes about 500ms.",
@@ -26,6 +34,10 @@ func registerTools(s *sdk.Server) {
 	// system memory tool
 	sdk.AddTool(s, &sdk.Tool{
 		Name: "system_memory_stats",
+		Annotations: &sdk.ToolAnnotations{
+			Title:        "System Memory Stats",
+			ReadOnlyHint: true,
+		},
 		Description: "Returns the server's RAM and swap usage. " +
 			"To assess memory pressure use 'available_bytes' and 'used_percent', " +
 			"never 'free_bytes' — Linux keeps idle RAM occupied with disk cache, " +
@@ -35,6 +47,10 @@ func registerTools(s *sdk.Server) {
 	// system disk tool
 	sdk.AddTool(s, &sdk.Tool{
 		Name: "system_disk_usage",
+		Annotations: &sdk.ToolAnnotations{
+			Title:        "System Disk Usage",
+			ReadOnlyHint: true,
+		},
 		Description: "Returns disk space usage per mountpoint, sorted from " +
 			"fullest to emptiest. By default it filters out pseudo-filesystems, snap packages " +
 			"and container layers, which show up as 100% full without that indicating a problem. " +
@@ -45,6 +61,10 @@ func registerTools(s *sdk.Server) {
 	// systemd services tool
 	sdk.AddTool(s, &sdk.Tool{
 		Name: "system_service_status",
+		Annotations: &sdk.ToolAnnotations{
+			Title:        "System Service Status",
+			ReadOnlyHint: true,
+		},
 		Description: "Returns the state of systemd service units — whether the services on " +
 			"this server are running. By default it scans every unit and reports only those " +
 			"needing attention (failed, stuck starting, or restarting), worst first; pass " +
@@ -57,6 +77,10 @@ func registerTools(s *sdk.Server) {
 	// docker containers tool
 	sdk.AddTool(s, &sdk.Tool{
 		Name: "docker_container_status",
+		Annotations: &sdk.ToolAnnotations{
+			Title:        "Docker Containe Status",
+			ReadOnlyHint: true,
+		},
 		Description: "Returns the state of Docker containers, worst first. By default it " +
 			"reports running containers plus anything broken, and hides containers that " +
 			"stopped cleanly; pass 'names' to ask about specific ones. Beyond what " +
@@ -69,6 +93,10 @@ func registerTools(s *sdk.Server) {
 	// docker logs tool
 	sdk.AddTool(s, &sdk.Tool{
 		Name: "docker_container_logs",
+		Annotations: &sdk.ToolAnnotations{
+			Title:        "Docker Container Logs",
+			ReadOnlyHint: true,
+		},
 		Description: "Returns what a container has written to stdout and stderr, interleaved " +
 			"in order, most recent lines by default. This is the follow-up to any finding from " +
 			"docker_container_status — an OOM kill, a failing healthcheck or a restart loop " +
@@ -78,55 +106,33 @@ func registerTools(s *sdk.Server) {
 			"Read-only.",
 	}, handleLogs)
 
-	registerExecTool(s)
-	registerRestartTool(s)
-}
+	// docker exec + restart tools
+	if allowed := containers.ActionAllowlist(); len(allowed) > 0 { // initialization statment condition - if <statement>; <condição> {}
+		sdk.AddTool(s, &sdk.Tool{
+			Name: "docker_container_exec",
+			Annotations: &sdk.ToolAnnotations{
+				Title:           "Run a command inside a container",
+				ReadOnlyHint:    false,
+				DestructiveHint: ptr(true),
+				OpenWorldHint:   ptr(false),
+			},
+			Description: "Runs a command inside one of the containers this server is permitted " +
+				"to reach (" + strings.Join(allowed, ", ") + ") and returns its stdout, stderr " +
+				"and exit code. ...",
+		}, handleExec)
 
-// Registered only when the allowlist is configured: the model cannot call a
-// tool that does not exist.
-func registerRestartTool(s *sdk.Server) {
-	allowed := containers.ActionAllowlist()
-	if len(allowed) == 0 {
-		return
+		sdk.AddTool(s, &sdk.Tool{
+			Name: "docker_container_restart",
+			Annotations: &sdk.ToolAnnotations{
+				Title:           "Restart a container",
+				ReadOnlyHint:    false,
+				DestructiveHint: ptr(true),
+				OpenWorldHint:   ptr(false),
+				IdempotentHint:  true,
+			},
+			Description: "Restarts one of the containers this server is permitted to restart (" +
+				strings.Join(allowed, ", ") + "), then waits and reports whether it actually came " +
+				"back up. ...",
+		}, handleRestart)
 	}
-
-	sdk.AddTool(s, &sdk.Tool{
-		Name: "docker_container_restart",
-		Annotations: &sdk.ToolAnnotations{
-			Title:           "Restart a container",
-			ReadOnlyHint:    false,
-			DestructiveHint: ptr(true),
-			OpenWorldHint:   ptr(false),
-			IdempotentHint:  true,
-		},
-		Description: "Restarts one of the containers this server is permitted to restart (" +
-			strings.Join(allowed, ", ") + "), then waits and reports whether it actually came " +
-			"back up — a container that crashes on boot returns to 'exited' within seconds, and " +
-			"that outcome is reported rather than assumed. The service is offline while it " +
-			"restarts. Every call requires the user to approve it; a declined restart does not " +
-			"happen. Diagnose with the read-only tools first: restarting clears the evidence.",
-	}, handleRestart)
-}
-
-func registerExecTool(s *sdk.Server) {
-	allowed := containers.ActionAllowlist()
-	if len(allowed) == 0 {
-		return
-	}
-
-	sdk.AddTool(s, &sdk.Tool{
-		Name: "docker_container_exec",
-		Annotations: &sdk.ToolAnnotations{
-			Title:           "Run a command inside a container",
-			ReadOnlyHint:    false,      // modify the environment
-			DestructiveHint: ptr(true),  // eg: can delete a container
-			OpenWorldHint:   ptr(false), // eg: can't search the web
-		},
-		Description: "Runs a command inside one of the containers this server is permitted " +
-			"to reach (" + strings.Join(allowed, ", ") + ") and returns its stdout, stderr " +
-			"and exit code. The command is an argument vector executed directly, not a shell " +
-			"line. Every call requires the user to approve that specific command before it " +
-			"runs, so expect a confirmation step; a declined command does not execute. " +
-			"Prefer the read-only tools for anything you can answer without running code.",
-	}, handleExec)
 }
