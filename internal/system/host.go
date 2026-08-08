@@ -8,7 +8,6 @@ import (
 	"github.com/shirou/gopsutil/v4/host"
 )
 
-// Data type to MCP client
 type HostInfo struct {
 	Hostname        string `json:"hostname"`
 	OS              string `json:"os"`
@@ -22,12 +21,10 @@ type HostInfo struct {
 	BootTime        string `json:"boot_time"`
 }
 
-// Get general data from machine
-// Receives context.Context because the call can be cancelled by user
 func GetHostInfo(ctx context.Context) (HostInfo, error) {
 	info, err := host.InfoWithContext(ctx)
 	if err != nil {
-		return HostInfo{}, fmt.Errorf("Getting host info: %w", err)
+		return HostInfo{}, fmt.Errorf("getting host info: %w", err)
 	}
 
 	uptime := time.Duration(info.Uptime) * time.Second

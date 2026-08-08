@@ -14,23 +14,17 @@ import (
 	"time"
 )
 
-// ErrUnavailable reports that this host has no systemd to query — the expected
-// case on macOS and Windows, and on a Linux box that does not run systemd.
 var ErrUnavailable = errors.New("systemd is not available on this host")
 
-// Above this restart count we warn even when the unit is currently active: a
-// service that keeps coming back reads as healthy in every listing while never
-// actually staying up. This is the failure `systemctl status` shows only if you
-// happen to look at the right moment.
+// Above this restart count we warn even when the unit is active: a service that
+// keeps coming back reads as healthy in every listing while never staying up.
 const restartWarnThreshold = 5
 
-// systemctl talks to PID 1 over a socket. If systemd itself is wedged the call
-// can block, so every invocation carries its own deadline — same reasoning as
-// the statfs timeout in the disk collector.
+// systemctl talks to PID 1 over a socket, which can block if systemd is wedged.
 const systemctlTimeout = 5 * time.Second
 
-// Properties requested from `systemctl show`. Fetching an explicit set keeps the
-// output small and stable; systemd emits well over a hundred per unit otherwise.
+// An explicit set keeps `show` output small; systemd emits over a hundred
+// properties per unit otherwise.
 var showProperties = []string{
 	"Id",
 	"Description",
@@ -59,9 +53,6 @@ type Unit struct {
 	ExitCode int    `json:"exit_code,omitempty"`
 	MainPID  int    `json:"main_pid,omitempty"`
 
-	// Seconds in the CURRENT state, whatever that state is. One number covers
-	// three different diagnoses: failed for 3 days, stuck activating for 40
-	// minutes, or active for 12 seconds with 800 restarts behind it.
 	StateForSeconds uint64 `json:"state_for_seconds,omitempty" jsonschema:"how long the unit has been in its current state; a short time paired with a high restart count means it is flapping right now"`
 
 	MemoryBytes uint64 `json:"memory_bytes,omitempty"`
@@ -85,8 +76,7 @@ func GetServiceStatus(ctx context.Context, names []string, includeAll bool) (Ser
 	explicit := len(names) > 0
 
 	if explicit {
-		// Caller-supplied names are the only untrusted input that reaches an
-		// argv, so they are checked before anything is executed.
+		// Checked before anything is executed; see validUnitName.
 		if err := validateUnitNames(names); err != nil {
 			return ServiceStatus{}, err
 		}
@@ -117,9 +107,8 @@ func GetServiceStatus(ctx context.Context, names []string, includeAll bool) (Ser
 		}
 	}
 
-	// Units the caller named explicitly are never filtered out — asking about
-	// nginx.service and getting nothing back because it is healthy would be a
-	// worse answer than saying so.
+	// Named units are never filtered out: asking about nginx.service and getting
+	// nothing back because it is healthy would be a worse answer than saying so.
 	for _, u := range all {
 		if explicit || includeAll || needsAttention(u) {
 			status.Units = append(status.Units, u)
@@ -146,12 +135,10 @@ func GetServiceStatus(ctx context.Context, names []string, includeAll bool) (Ser
 
 // severity ranks units for display order. Lower sorts first.
 //
-// Note what is NOT here: load_state "not-found". systemd carries an entry for
+// Deliberately absent: load_state "not-found". systemd carries an entry for
 // every unit anything merely references, so a stock install lists a dozen
-// never-installed units (ypbind, plymouth, syslog) as not-found/dead forever.
-// They are the systemd counterpart of the pseudo-filesystems the disk tool
-// filters — noise that looks alarming and means nothing. When a missing unit
-// genuinely matters, something tried to start it, and it surfaces as failed.
+// never-installed ones (ypbind, plymouth) as not-found/dead forever. When a
+// missing unit genuinely matters, something tried to start it and it failed.
 func severity(u Unit) int {
 	switch {
 	case u.ActiveState == "failed":
@@ -173,16 +160,16 @@ func needsAttention(u Unit) bool {
 	return severity(u) < 5
 }
 
-// Warnings are built HERE rather than in the renderer so a client that reads
-// only structuredContent sees them too.
+// Built here rather than in the renderer so a client reading only
+// structuredContent sees them too.
 func buildWarnings(units []Unit) []string {
 	var out []string
 	for _, u := range units {
 		switch {
 		case u.ActiveState == "failed":
 			msg := fmt.Sprintf("%s failed — %s", u.Name, failureReason(u))
-			// systemd gives up after the start limit, so a failed unit with
-			// restarts behind it is an abandoned crash loop, not a one-off.
+			// systemd gives up after the start limit, so restarts behind a
+			// failed unit mean an abandoned crash loop, not a one-off.
 			if u.Restarts > 0 {
 				msg += fmt.Sprintf(", after %d restarts (systemd stopped retrying)", u.Restarts)
 			}
@@ -207,8 +194,8 @@ func buildWarnings(units []Unit) []string {
 				"%s is masked and cannot be started until it is unmasked", u.Name))
 		}
 
-		// The one a plain status check hides: currently up, so every listing
-		// calls it healthy, but it has been dying and restarting all along.
+		// The one a plain status check hides: up right now, so every listing
+		// calls it healthy, while it has been dying all along.
 		if u.ActiveState == "active" && u.Restarts >= restartWarnThreshold {
 			out = append(out, fmt.Sprintf(
 				"%s reads as active but has restarted %d times and has only held "+
@@ -219,13 +206,10 @@ func buildWarnings(units []Unit) []string {
 	return out
 }
 
-// Unit names come from the model, which makes them the only untrusted value
-// that reaches a command line here. Shell injection is already impossible —
-// os/exec calls execve directly, so there is no shell and metacharacters are
-// inert — but systemctl still parses its own arguments, and a name beginning
-// with '-' would be read as an option. `--host=` in particular makes systemctl
-// dial out over SSH. So names are validated against what systemd itself allows
-// rather than trusted, and the check runs before anything is executed.
+// Unit names come from the model, the only untrusted value reaching a command
+// line here. Shell injection is already impossible (os/exec calls execve, so
+// there is no shell), but systemctl parses its own arguments and would read a
+// name beginning with '-' as an option — `--host=` makes it dial out over SSH.
 var validUnitName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.@:\\-]{0,255}$`)
 
 func validateUnitNames(names []string) error {
@@ -238,9 +222,8 @@ func validateUnitNames(names []string) error {
 	return nil
 }
 
-// failureReason turns systemd's Result enum into the sentence an operator
-// actually needs. oom-kill in particular is invisible in `systemctl status`
-// output unless you already know to look for it.
+// failureReason turns systemd's Result enum into a sentence. oom-kill in
+// particular is invisible in `systemctl status` unless you know to look.
 func failureReason(u Unit) string {
 	switch {
 	case u.Result == "exit-code" && u.ExitCode != 0:
@@ -260,9 +243,8 @@ func failureReason(u Unit) string {
 	}
 }
 
-// listServiceUnits enumerates service unit names. Deliberately parsed from the
-// plain table rather than `--output=json`, which older systemd releases lack;
-// only the first column is read, and every detail comes from `show` afterwards.
+// Parsed from the plain table rather than `--output=json`, which older systemd
+// releases lack. Only the first column is read; details come from `show`.
 func listServiceUnits(ctx context.Context) ([]string, error) {
 	out, err := run(ctx, "list-units", "--type=service", "--all", "--plain", "--no-legend", "--no-pager")
 	if err != nil {
@@ -279,9 +261,9 @@ func listServiceUnits(ctx context.Context) ([]string, error) {
 	return names, nil
 }
 
-// showUnits fetches every property for every unit in ONE systemctl call —
-// passing 200 unit names on a command line is fine, spawning 200 processes is
-// not. systemd separates each unit's block with a blank line.
+// showUnits fetches every property for every unit in ONE systemctl call:
+// passing 200 names on a command line is fine, spawning 200 processes is not.
+// systemd separates each unit's block with a blank line.
 func showUnits(ctx context.Context, names []string) ([]Unit, error) {
 	args := append([]string{"show", "--property=" + strings.Join(showProperties, ",")}, names...)
 
@@ -318,9 +300,9 @@ func showUnits(ctx context.Context, names []string) ([]Unit, error) {
 			MemoryBytes: atou(props["MemoryCurrent"]),
 		}
 
-		// systemd reports timestamps as microseconds since boot, so the age of
-		// the current state is (uptime - that). Comparing against uptime also
-		// guards the case where the clock is not usable and we skip the field.
+		// Timestamps are microseconds since boot, so the age of the current
+		// state is (uptime - that). The comparison also skips the field when
+		// the clock is unusable.
 		if changed := atou(props["StateChangeTimestampMonotonic"]) / 1_000_000; changed > 0 && uptime > changed {
 			u.StateForSeconds = uptime - changed
 		}
@@ -336,7 +318,7 @@ func run(ctx context.Context, args ...string) (string, error) {
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "systemctl", args...)
-	// The C locale keeps property output stable regardless of the host language.
+	// C locale: keeps output stable regardless of the host language.
 	cmd.Env = append(os.Environ(), "LC_ALL=C")
 
 	var stdout, stderr bytes.Buffer
@@ -352,8 +334,7 @@ func run(ctx context.Context, args ...string) (string, error) {
 				args[0], systemctlTimeout)
 		}
 		// systemctl exits non-zero merely because a queried unit is failed or
-		// missing, while still writing perfectly good output. Usable stdout
-		// therefore outranks the exit status.
+		// missing, while still writing good output. Usable stdout outranks it.
 		if stdout.Len() > 0 {
 			return stdout.String(), nil
 		}
@@ -364,8 +345,8 @@ func run(ctx context.Context, args ...string) (string, error) {
 	return stdout.String(), nil
 }
 
-// hostUptimeSeconds reads /proc/uptime. Returns 0 when unreadable, which callers
-// treat as "state age unknown" rather than an error — it is a nice-to-have.
+// Returns 0 when unreadable; callers treat that as "state age unknown" rather
+// than an error.
 func hostUptimeSeconds() uint64 {
 	b, err := os.ReadFile("/proc/uptime")
 	if err != nil {
@@ -380,7 +361,7 @@ func hostUptimeSeconds() uint64 {
 }
 
 // systemd writes "[not set]" for unset numeric properties, so both parsers
-// return zero on anything non-numeric instead of surfacing an error.
+// return zero on anything non-numeric.
 func atoi(s string) int {
 	v, err := strconv.Atoi(s)
 	if err != nil {

@@ -44,11 +44,17 @@ func renderContainerTable(status containers.ContainerStatus) string {
 		return b.String()
 	}
 
-	type row struct{ name, image, state, health, restarts, since, ports string }
+	cols := []column{
+		{"NAME", alignLeft},
+		{"IMAGE", alignLeft},
+		{"STATE", alignLeft},
+		{"HEALTH", alignLeft},
+		{"RESTARTS", alignRight},
+		{"FOR", alignLeft},
+		{"PORTS", alignLeft},
+	}
 
-	head := row{"NAME", "IMAGE", "STATE", "HEALTH", "RESTARTS", "FOR", "PORTS"}
-
-	rows := make([]row, 0, len(status.Containers))
+	rows := make([][]string, 0, len(status.Containers))
 	for _, c := range status.Containers {
 		health := c.Health
 		if health == "" {
@@ -61,46 +67,20 @@ func renderContainerTable(status containers.ContainerStatus) string {
 			state = fmt.Sprintf("exited (%d)", c.ExitCode)
 		}
 
-		rows = append(rows, row{
-			name:     c.Name,
-			image:    c.Image,
-			state:    state,
-			health:   health,
-			restarts: fmt.Sprintf("%d", c.RestartCount),
-			since:    compactDuration(c.StateForSeconds),
-			ports:    formatPorts(c.Ports),
+		rows = append(rows, []string{
+			c.Name,
+			c.Image,
+			state,
+			health,
+			fmt.Sprintf("%d", c.RestartCount),
+			compactDuration(c.StateForSeconds),
+			formatPorts(c.Ports),
 		})
 	}
 
-	// Same two-pass measure-then-write as the disk and service tables.
-	w := [6]int{len(head.name), len(head.image), len(head.state), len(head.health), len(head.restarts), len(head.since)}
-	for _, r := range rows {
-		w[0] = max(w[0], len(r.name))
-		w[1] = max(w[1], len(r.image))
-		w[2] = max(w[2], len(r.state))
-		w[3] = max(w[3], len(r.health))
-		w[4] = max(w[4], len(r.restarts))
-		w[5] = max(w[5], len(r.since))
-	}
+	b.WriteString(table(cols, rows))
 
-	write := func(r row) {
-		fmt.Fprintf(&b, "%-*s  %-*s  %-*s  %-*s  %*s  %-*s  %s\n",
-			w[0], r.name,
-			w[1], r.image,
-			w[2], r.state,
-			w[3], r.health,
-			w[4], r.restarts,
-			w[5], r.since,
-			r.ports)
-	}
-
-	write(head)
-	for _, r := range rows {
-		write(r)
-	}
-
-	// Footer: what `docker ps` would not tell you. Computed in the containers
-	// package, so structuredContent carries these too.
+	// Footer: what `docker ps` would not tell you.
 	for _, warn := range status.Warnings {
 		fmt.Fprintf(&b, "\nwarning: %s\n", warn)
 	}

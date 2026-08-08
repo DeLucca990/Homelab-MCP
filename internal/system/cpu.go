@@ -8,20 +8,19 @@ import (
 	"github.com/shirou/gopsutil/v4/cpu"
 )
 
-// CoreUsage is the usage breakdown of a single core,
-// in the spirit of htop's colored bars.
+// CoreUsage is the breakdown of a single core, in the spirit of htop's bars.
 type CoreUsage struct {
 	Core string `json:"core"` // "cpu0", "cpu1", ...
-	// TotalPercent = sum of the real work (user + system + nice + irq + steal).
-	TotalPercent  float64 `json:"total_percent"`
-	UserPercent   float64 `json:"user_percent"`   // ordinary processes
+
+	TotalPercent  float64 `json:"total_percent"` // real work: user+system+nice+irq+steal
+	UserPercent   float64 `json:"user_percent"`
 	SystemPercent float64 `json:"system_percent"` // kernel / syscalls
-	NicePercent   float64 `json:"nice_percent"`   // low-priority processes
-	IRQPercent    float64 `json:"irq_percent"`    // interrupts (hard + soft)
-	StealPercent  float64 `json:"steal_percent"`  // stolen by the hypervisor (VMs)
-	// IOWait is time spent STALLED waiting on disk/network. Technically it is
-	// idle, which is why it stays out of the total — but it is the most
-	// important signal when the server "feels slow" and the CPU looks low.
+	NicePercent   float64 `json:"nice_percent"`
+	IRQPercent    float64 `json:"irq_percent"`   // hard + soft
+	StealPercent  float64 `json:"steal_percent"` // taken by the hypervisor
+
+	// Stalled on disk or network. Technically idle, so it stays out of the
+	// total — but it is the signal when the server feels slow at low CPU.
 	IOWaitPercent float64 `json:"iowait_percent"`
 	IdlePercent   float64 `json:"idle_percent"`
 }
@@ -31,8 +30,7 @@ const (
 	maxCPUInterval     = 5 * time.Second
 )
 
-// GetCoreUsage takes two snapshots of the kernel counters `interval` apart
-// and computes the difference between them.
+// GetCoreUsage diffs two snapshots of the kernel counters, `interval` apart.
 func GetCoreUsage(ctx context.Context, interval time.Duration) ([]CoreUsage, error) {
 	if interval <= 0 {
 		interval = defaultCPUInterval
@@ -46,9 +44,8 @@ func GetCoreUsage(ctx context.Context, interval time.Duration) ([]CoreUsage, err
 		return nil, fmt.Errorf("first read of /proc/stat: %w", err)
 	}
 
-	// WARNING: time.Sleep IGNORES context cancellation.
-	// This select is the idiomatic way to "sleep, but wake up
-	// immediately if the caller gives up on the call".
+	// Not time.Sleep: that ignores cancellation, and this call holds the caller
+	// for the whole window.
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -73,8 +70,8 @@ func GetCoreUsage(ctx context.Context, interval time.Duration) ([]CoreUsage, err
 }
 
 func diffCoreTimes(before, after cpu.TimesStat) CoreUsage {
-	// Guest and GuestNice are NOT part of the sum: the kernel already accounts
-	// for them inside User and Nice. Adding them again would inflate the denominator.
+	// Guest and GuestNice are excluded: the kernel already counts them inside
+	// User and Nice, so adding them would inflate the denominator.
 	total := func(t cpu.TimesStat) float64 {
 		return t.User + t.System + t.Nice + t.Iowait +
 			t.Irq + t.Softirq + t.Steal + t.Idle
@@ -82,7 +79,7 @@ func diffCoreTimes(before, after cpu.TimesStat) CoreUsage {
 
 	elapsed := total(after) - total(before)
 	if elapsed <= 0 {
-		// Window too short, or the kernel clock didn't advance.
+		// Window too short, or the kernel clock did not advance.
 		return CoreUsage{Core: after.CPU, IdlePercent: 100}
 	}
 
