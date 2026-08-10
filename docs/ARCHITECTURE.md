@@ -3,6 +3,15 @@
 How this server exposes tools, how it stops mid-call to ask the user for
 permission, and what the approval fingerprint does and does not protect.
 
+This document is the **general** shape. What is specific to one integration lives
+next to it:
+
+| Module | Design notes | Tool reference |
+| --- | --- | --- |
+| System and systemd | [modules/system.md](modules/system.md) | [tools/SYSTEM.md](../tools/SYSTEM.md) |
+| Docker | [modules/docker.md](modules/docker.md) | [tools/DOCKER.md](../tools/DOCKER.md) |
+| Radarr | [modules/radarr.md](modules/radarr.md) | [tools/RADARR.md](../tools/RADARR.md) |
+
 Written against `github.com/modelcontextprotocol/go-sdk` **v1.7.0**. The
 multi-round-trip behaviour described in §3 is SDK- and protocol-version
 sensitive; if you upgrade the SDK, re-read that section against the new code.
@@ -12,11 +21,13 @@ sensitive; if you upgrade the SDK, re-read that section against the new code.
 ## 1. Layout
 
 ```
-cmd/server/main.go        stdio transport, signal handling
+cmd/server/main.go        .env loading, stdio transport, signal handling
+internal/dotenv/          .env → process environment, before registration
 internal/mcp/             protocol layer — registration, handlers, rendering, confirmation
 internal/system/          host, CPU, memory, disk            (gopsutil)
 internal/services/        systemd units                      (systemctl)
 internal/containers/      docker                             (Engine API over the unix socket)
+internal/radarr/          radarr                             (v3 HTTP API)
 ```
 
 One rule holds the layering together: **`internal/mcp` never touches the OS, and
@@ -102,32 +113,31 @@ express "explicitly false" for a `*bool` field.
 
 ### Conditional registration
 
-The two state-changing tools are registered only when the allowlist is
-non-empty:
+A tool the environment does not authorise is **never created**, which is a
+stronger guarantee than one that exists and refuses:
 
 ```go
-if allowed := containers.ActionAllowlist(); len(allowed) > 0 {
-    sdk.AddTool(s, &sdk.Tool{Name: "docker_container_exec", ...}, handleExec)
-    sdk.AddTool(s, &sdk.Tool{Name: "docker_container_restart", ...}, handleRestart)
-}
+if allowed := containers.ActionAllowlist(); len(allowed) > 0 { ... }  // docker actions
+if radarr.Configured() { ... }                                       // the radarr family
+if radarr.ReadOnly() { return }                                      // its four writes
 ```
 
-A default install therefore exposes **7 read-only tools**; setting
-`HOMELAB_MCP_ALLOW_CONTAINER_NAMES` raises that to **9**. The allowlist is also
-interpolated into each description, so the model is told which containers it may
-name instead of discovering it by being refused.
+**Which means the environment must be complete before `New()` is called.**
+`cmd/server/main.go` loads the `.env` first for exactly that reason: a variable
+that arrives after registration changes nothing, because the tool it would have
+enabled was already not created. `internal/dotenv` never overwrites a variable
+that is already set, so the file is a fallback for a binary launched with no
+configuration — an MCP client execs it directly, with no shell to source
+anything, and a client's `env` block does not survive an ssh hop. Whatever the
+operator supplied deliberately still wins.
 
-| Tool | Reads | Needs allowlist | Asks for confirmation |
+The result is 7 tools on a default install and up to 17 fully configured:
+
+| Family | Always | Needs config | Confirms |
 |---|---|---|---|
-| `system_host_info` | host | – | – |
-| `system_cpu_cores` | `/proc/stat` | – | – |
-| `system_memory_stats` | meminfo | – | – |
-| `system_disk_usage` | statfs | – | – |
-| `system_service_status` | `systemctl` | – | – |
-| `docker_container_status` | docker socket | – | – |
-| `docker_container_logs` | docker socket | – | – |
-| `docker_container_exec` | docker socket | **yes** | **yes** |
-| `docker_container_restart` | docker socket | **yes** | **yes** |
+| System (5) | all | – | – |
+| Docker (4) | status, logs | exec, restart — **allowlist** | exec, restart |
+| Radarr (8) | – | all — **URL + API key** | add, search, remove, queue_remove |
 
 ---
 
@@ -143,7 +153,9 @@ in a plain `tools/call` allows that.
 
 MCP's multi-round-trip flow (SEP-2322) gives the handler a way to answer "not
 yet, ask this first". `internal/mcp/confirm.go` implements it in one place for
-both action tools, and returns a three-state result:
+every action tool — it is the security boundary of the whole server, so a fix
+applied to one copy and missed in another would fail silently — and returns a
+three-state result:
 
 ```go
 func requireApproval(req *sdk.CallToolRequest, a approval) (bool, *sdk.CallToolResult, error)
@@ -170,6 +182,11 @@ input request and a `RequestState`:
 }
 ```
 
+Nothing else is in that response — `content` is `null` and the structured output
+is the zero value. **The model learns nothing from the first pass**, deliberately:
+a response full of data would read as a response, and the operation has not
+happened yet.
+
 **Second pass** — the client shows the message, collects the decision, and
 **re-calls the same tool with the same arguments**, now carrying
 `InputResponses` and echoing `RequestState`. `requireApproval` runs again, takes
@@ -193,7 +210,7 @@ sequenceDiagram
     S->>S: RequestState == fingerprint ?
     S->>D: POST /containers/{id}/restart
     D-->>S: 204
-    S->>S: poll until settled (§4.5)
+    S->>S: poll until settled
     S-->>C: result
 ```
 
@@ -216,6 +233,12 @@ has to be the operator: **the identity a client reports at `initialize` is
 self-declared and unauthenticated**, so a server cannot recognise a trustworthy
 client — it can only be told. This is also why `clientName` feeds only the log
 and the refusal message, and never a branch.
+
+There is a third shape, invisible from the handler: on protocol versions before
+`2026-07-28` the SDK drives the round trip itself, sending the client an
+`elicitation/create` request and re-invoking the handler with the response. On
+later versions the input-required result goes back to the client, which retries.
+`requireApproval` is written against the handler's view and works either way.
 
 Which path a session got is logged once, at connect time:
 
@@ -257,46 +280,40 @@ Anything short of an explicit accept stops the action:
 | key missing | `<refusal>: no confirmation was returned` |
 | wrong type | `<refusal>: confirmation response was not understood` |
 
-The `refusal` prefix ("command not run", "container not restarted") is phrased so
-that whatever the model reports back names **what did not happen**. A model that
-paraphrases an error loosely still cannot turn it into "done".
+The `refusal` prefix ("command not run", "movie not added", "no search was
+started") is phrased so that whatever the model reports back names **what did not
+happen**. A model that paraphrases an error loosely still cannot turn it into
+"done".
 
 ---
 
 ## 4. Security
 
-Three layers stand between the model and the container. They are independent and
-fail in different directions on purpose.
+### 4.1 The layers
 
-### 4.1 Allowlist — what is reachable at all
+| Layer | Applies to | Bypassable by |
+|---|---|---|
+| Registration gate | every action tool | nothing outside this server |
+| Docker allowlist | exec, restart | nothing outside this server |
+| Human confirmation | every action tool | a client that auto-approves |
+| Fingerprint | every action tool | a client that replays state |
 
-`HOMELAB_MCP_ALLOW_CONTAINER_NAMES` is a comma-separated list of container names
-(the `NAMES` column of `docker ps` — not the image, not the id). Empty means the
-action tools are never registered, and the model cannot call a tool that does
-not exist.
+The first two are the ones that hold regardless of how a client or a model
+behaves. What each module gates on is in its own page:
+[docker](modules/docker.md#the-three-layers),
+[radarr](modules/radarr.md#configuration-and-reachability).
 
-This is the only layer that **cannot be bypassed by a confused client, a client
-that auto-approves everything, or a model under prompt injection.** The other
-two depend on something outside the server behaving; this one does not.
+### 4.2 The fingerprint
 
-One list covers every action, deliberately. A shell inside a container already
-carries the power to take that container down, so "may run commands in X" and
-"may restart X" are not separable grants — splitting them would advertise a
-distinction the runtime does not enforce.
-
-### 4.2 Human confirmation — §3
-
-### 4.3 Fingerprint — binding the approval to the operation
-
-The gap the first two layers leave: the confirmation and the execution are
-**two separate tool calls**. The second one carries its own arguments. Without a
+The gap the other layers leave: the confirmation and the execution are **two
+separate tool calls**, and the second carries its own arguments. Without a
 binding, a user could approve `ls /config` and the retry could arrive as
 `rm -rf /config` — same tool, same session, different arguments, and the server
 would have no way to notice.
 
 `RequestState` closes that. The server puts a fingerprint of the exact operation
-into the first response, the client echoes it back on the retry, and the server
-recomputes it from the arguments it just received:
+into the first response, the client echoes it back, and the server recomputes it
+from the arguments it just received:
 
 ```go
 if req.Params.RequestState != a.fingerprint {
@@ -305,25 +322,28 @@ if req.Params.RequestState != a.fingerprint {
 }
 ```
 
-The hash itself (`internal/containers/exec.go`):
+There are two implementations. The generic one, `internal/mcp/confirm.go`:
 
 ```go
-func Fingerprint(container string, command []string) string {
+func fingerprint(parts ...string) string {
 	h := sha256.New()
-	h.Write([]byte(container))
-	for _, arg := range command {
-		binary.Write(h, binary.BigEndian, uint32(len(arg)))
-		h.Write([]byte(arg))
+	for _, p := range parts {
+		binary.Write(h, binary.BigEndian, uint32(len(p)))
+		h.Write([]byte(p))
 	}
 	return hex.EncodeToString(h.Sum(nil))[:32]
 }
 ```
 
-**Why the length prefixes.** Concatenating arguments would make
-`["rm", "-rf"]` and `["rm-rf"]` hash identically — the argv boundary is
-semantic, and a hash that ignores it lets an approval for one command authorise
-a different one. Writing each argument's length before its bytes makes the
-encoding unambiguous. Verified:
+Callers pass the tool name as the first part. The older
+`containers.Fingerprint(container, argv)` predates it and does not mix the tool
+name in; the two want unifying.
+
+**Why the length prefixes.** Concatenating the parts would make `["rm","-rf"]`
+and `["rm-rf"]` hash identically — the boundary between two values is semantic,
+and a hash that ignores it lets an approval for one operation authorise a
+different one. Writing each part's length before its bytes makes the encoding
+unambiguous.
 
 | Property | Result |
 |---|---|
@@ -331,52 +351,62 @@ encoding unambiguous. Verified:
 | `("ab",["x"])` vs `("a",["bx"])` | different |
 | output width | 32 hex chars = 128 bits |
 
-**Why 128 bits.** The property that matters here is second-preimage resistance —
-finding a *different* operation with the same fingerprint. 128 bits is far
-beyond reach, and the value is echoed through a client, so a shorter string
-keeps the protocol traffic readable.
+**Why 128 bits.** The property that matters is second-preimage resistance —
+finding a *different* operation with the same fingerprint. 128 bits is far beyond
+reach, and the value is echoed through a client, so a shorter string keeps the
+protocol traffic readable.
 
-**What the fingerprint proves:** the operation now being executed is
-byte-for-byte the `(container, argv)` pair that was shown to the human.
+**What it proves:** the operation now being executed is byte-for-byte the one
+that was shown to the human.
 
 **What it does not prove:**
 
 - **Not freshness.** There is no nonce and no server-side record of issued
   fingerprints. It proves *same operation*, not *fresh approval*. A client that
   replayed a stored `RequestState` for an identical operation would pass. In
-  practice `RequestState` is protocol-level and constructed by the client, not
-  by the model — but the server does not enforce that.
-- **Not the tool identity.** The fingerprint covers `(container, argv)` only.
-  `docker_container_restart` uses the synthetic argv `["restart"]`, which
-  **collides with an exec of the literal command `restart` in the same
-  container** — verified: both produce `60139298fc75342a03fa46ad79c8117c` for
-  `radarr`. Not currently reachable, because a well-behaved client builds
-  `RequestState` itself and the model never chooses it. Closing it is one line —
-  mix the tool name into the hash — and would remove the dependency on client
-  behaviour.
+  practice `RequestState` is protocol-level and constructed by the client, not by
+  the model — but the server does not enforce that.
+- **Not the tool identity, for the Docker tools.** `containers.Fingerprint`
+  covers `(container, argv)` only, and `docker_container_restart` uses the
+  synthetic argv `["restart"]`, which **collides with an exec of the literal
+  command `restart` in the same container** — verified: both produce
+  `60139298fc75342a03fa46ad79c8117c` for `radarr`. Not currently reachable,
+  because a well-behaved client builds `RequestState` itself and the model never
+  chooses it. Closing it is one line: use the generic helper.
 - **Not the user's identity.** The server knows a decision came back through the
   session. It has no idea who made it.
 
-### 4.4 Untrusted input that reaches a command line
+### 4.3 Where an argument is not self-describing, fingerprint the resolution
 
-Two places take a model-supplied string toward something that executes:
+The Docker tools hash arguments the caller supplied, and that is enough because
+`(container, argv)` says everything about what will happen.
 
-**systemd unit names** reach `systemctl`'s argv. Shell injection is already
-impossible — `os/exec` calls `execve`, so there is no shell and metacharacters
-are inert — but `systemctl` parses its own arguments, and a name starting with
-`-` would be read as an option. `--host=` in particular makes it dial out over
-SSH. So names are validated before anything runs:
+The Radarr tools cannot: `tmdb_id: 438631` and `queue_id: 9` mean whatever Radarr
+currently says they mean, and Radarr changes underneath. So those handlers
+**resolve first and hash the resolution** — the film, the quality profile, the
+folder, the queue item's title — on both passes. The human then approves "Dune
+(2021) at UHD-2160p into /movies" rather than a number, and state that moved
+between the confirmation and the retry produces a mismatch instead of an action
+against different values. Worked examples in
+[modules/radarr.md](modules/radarr.md#adding-resolve-first-act-second).
 
-```go
-var validUnitName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.@:\\-]{0,255}$`)
-```
+The general shape: **a confirmation is only worth as much as the distance between
+what the human read and what the code then did.**
 
-**Container names** never reach a request path at all. Every Docker call
-resolves the name against the daemon's own listing first and then interpolates
-the **id Docker returned**, so a caller-supplied string is only ever compared,
-never used to build a URL.
+### 4.4 Untrusted input that reaches something that executes
+
+Two places take a model-supplied string toward execution, and each is handled in
+its module:
+
+- **systemd unit names** reach `systemctl`'s argv —
+  [modules/system.md](modules/system.md#running-systemctl)
+- **container names** never reach a request path at all —
+  [modules/docker.md](modules/docker.md#no-caller-supplied-string-reaches-a-request-path)
 
 ### 4.5 Bounds
+
+Every call out of this process is bounded, and every cap is reported rather than
+silent. Silent truncation reads as a complete answer.
 
 | Bound | Value | Why |
 |---|---|---|
@@ -386,10 +416,11 @@ never used to build a URL.
 | exec timeout | 30s default, 120s max | |
 | exec output | 16 KiB, truncation reported | |
 | log output | 16 KiB, truncation reported | |
-| restart settle | 15s, 3s stable window | Docker reports "running" the instant the process spawns; a single check would pass a container that dies a second later |
-
-Truncation is always reported in the result, never silent. Silent truncation
-reads as a complete answer.
+| restart settle | 15s, 3s stable window | Docker reports "running" the instant the process spawns |
+| Radarr API timeout | 10s | answered from Radarr's local database |
+| Radarr lookup timeout | 30s | proxied to TMDB over the internet |
+| Radarr queue page | 200 items | the API pages at 10 |
+| Radarr library listing | 25 default, 200 max | a full dump buries the answer |
 
 ---
 
@@ -398,9 +429,13 @@ reads as a complete answer.
 | Symptom | Where to look |
 |---|---|
 | Model says it has no action tools | Allowlist unset in the environment the server actually got — for an SSH-launched server, the `env` block in the client config reaches only the local `ssh` process, not the remote one |
-| `Failed to call tool` on exec/restart | Client declares no elicitation and `HOMELAB_MCP_TRUST_CLIENT_CONFIRMATION` is unset — see the connect-time log line |
-| Approved but refused | Fingerprint mismatch: the retry carried different arguments |
+| Model says it has no Radarr tools | One of `SERVER_URL` / `RADARR_API_KEY` is unset, or the URL would not parse — the connect-time log says which |
+| `Failed to call tool` on an action | Client declares no elicitation and `HOMELAB_MCP_TRUST_CLIENT_CONFIRMATION` is unset — see the connect-time log line |
+| Approved but refused | Fingerprint mismatch: the retry carried different arguments — or, for Radarr, the state it resolved against moved (§4.3) |
 | A warning is missing from one client | It was built in the renderer instead of the collector (§1) |
+| A `.env` exists and had no effect | It is not on the search path (beside the executable, one above, then the cwd — never trust the cwd), or the variable was already set in the environment and left alone. Both are logged at startup |
+| Radarr answers a web page, not JSON | The URL points at a reverse proxy or the wrong port, or a subfolder install is missing its url base |
+| A tool changed but the model still sees the old schema | Schemas are generated at registration; restart the MCP client |
 
 ---
 
@@ -411,5 +446,8 @@ reads as a complete answer.
 | Add a tool | `internal/mcp/register.go` + a `tool_*.go` |
 | Change what the user reads before approving | the `approval.message` in the tool's handler |
 | Change the confirmation flow itself | `internal/mcp/confirm.go` — one place, on purpose |
-| Change what may be acted on | `internal/containers/allowlist.go` |
 | Change table formatting | `internal/mcp/render.go` |
+| Change what may be acted on | `internal/containers/allowlist.go` |
+| Change how Radarr is addressed or authenticated | `internal/radarr/client.go` |
+| Change what is resolved before an add is approved | `radarr.Plan` in `internal/radarr/add.go` |
+| Change where configuration is read from | `internal/dotenv/` |

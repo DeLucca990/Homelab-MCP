@@ -1,11 +1,13 @@
 package mcp
 
 import (
+	"log"
 	"strings"
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/DeLucca990/homelab-mcp/internal/containers"
+	"github.com/DeLucca990/homelab-mcp/internal/radarr"
 )
 
 func registerTools(s *sdk.Server) {
@@ -107,7 +109,7 @@ func registerTools(s *sdk.Server) {
 	}, handleLogs)
 
 	// docker exec + restart tools
-	if allowed := containers.ActionAllowlist(); len(allowed) > 0 { // initialization statment condition - if <statement>; <condição> {}
+	if allowed := containers.ActionAllowlist(); len(allowed) > 0 { // initialization statment condition - if <statement>; <condition> {}
 		sdk.AddTool(s, &sdk.Tool{
 			Name: "docker_container_exec",
 			Annotations: &sdk.ToolAnnotations{
@@ -135,4 +137,155 @@ func registerTools(s *sdk.Server) {
 				"back up. ...",
 		}, handleRestart)
 	}
+
+	registerRadarrTools(s)
+}
+
+// RADARR tools
+func registerRadarrTools(s *sdk.Server) {
+	if !radarr.Configured() {
+		return
+	}
+
+	base, err := radarr.BaseURL()
+	if err != nil {
+		log.Printf("radarr tools not registered: %v", err)
+		return
+	}
+
+	mode := "read and write"
+	if radarr.ReadOnly() {
+		mode = "read-only (" + radarr.ReadOnlyEnv + " is set)"
+	}
+	log.Printf("radarr at %s: %s", base, mode)
+
+	// radarr lookup tool
+	sdk.AddTool(s, &sdk.Tool{
+		Name: "radarr_movie_lookup",
+		Annotations: &sdk.ToolAnnotations{
+			Title:        "Radarr Movie Lookup",
+			ReadOnlyHint: true,
+		},
+		Description: "Searches TMDB through Radarr and returns candidate movies with their " +
+			"TMDB ids, and whether each is already in the library. This is the first step of " +
+			"adding anything: radarr_movie_add takes a tmdb_id, because a title on its own does " +
+			"not identify a film — several films share one. Changes nothing.",
+	}, handleRadarrLookup)
+
+	// radarr library tool
+	sdk.AddTool(s, &sdk.Tool{
+		Name: "radarr_library_status",
+		Annotations: &sdk.ToolAnnotations{
+			Title:        "Radarr Library Status",
+			ReadOnlyHint: true,
+		},
+		Description: "Returns what Radarr is monitoring and what it has actually downloaded, " +
+			"missing first. Pass 'term' to ask about one film. Beyond Radarr's own list it " +
+			"separates the two ways a movie can be absent: 'missing' means it has been released, " +
+			"is monitored, and still has no file — Radarr owes you that one — while a film that " +
+			"is simply not out yet is counted apart and is not a problem.",
+	}, handleRadarrLibrary)
+
+	// radarr queue tool
+	sdk.AddTool(s, &sdk.Tool{
+		Name: "radarr_queue_status",
+		Annotations: &sdk.ToolAnnotations{
+			Title:        "Radarr Download Queue",
+			ReadOnlyHint: true,
+		},
+		Description: "Returns Radarr's download queue with the progress of each item, worst " +
+			"first. Beyond the percentage it reports the two states a progress bar hides: a " +
+			"download that is stalled — still incomplete, with the client reporting no time " +
+			"remaining, so nothing is arriving — and one that finished but could not be " +
+			"imported, where the file is on disk and the movie is still missing from the " +
+			"library. This is what answers 'is my movie downloading' and 'why has it not " +
+			"appeared yet'.",
+	}, handleRadarrQueue)
+
+	// radarr health tool
+	sdk.AddTool(s, &sdk.Tool{
+		Name: "radarr_system_health",
+		Annotations: &sdk.ToolAnnotations{
+			Title:        "Radarr System Health",
+			ReadOnlyHint: true,
+		},
+		Description: "Returns Radarr's version, uptime, root folders and its own failing health " +
+			"checks. This is the answer to 'nothing is downloading and everything looks fine': " +
+			"the container can be up and healthy while every indexer it has is refusing to " +
+			"answer or its download client is unreachable, and Radarr records exactly that here.",
+	}, handleRadarrHealth)
+
+	if radarr.ReadOnly() {
+		return
+	}
+
+	// radarr add + queue removal tools
+	sdk.AddTool(s, &sdk.Tool{
+		Name: "radarr_movie_add",
+		Annotations: &sdk.ToolAnnotations{
+			Title:           "Add a movie to Radarr",
+			ReadOnlyHint:    false,
+			DestructiveHint: ptr(false),
+			OpenWorldHint:   ptr(true),
+			IdempotentHint:  true,
+		},
+		Description: "Adds a movie to Radarr and, by default, starts searching for a release " +
+			"immediately. Takes the tmdb_id from radarr_movie_lookup — call that first, and do " +
+			"not guess an id. Quality defaults to the HD-1080p profile, so pass " +
+			"'quality_profile' only when the user asked for a different resolution. The root " +
+			"folder may be omitted only when Radarr has exactly one, because it decides which " +
+			"disk fills up. Asks the user before adding anything, showing the film and the " +
+			"destination it resolved.",
+	}, handleRadarrAdd)
+
+	sdk.AddTool(s, &sdk.Tool{
+		Name: "radarr_movie_search",
+		Annotations: &sdk.ToolAnnotations{
+			Title:           "Search for a release of a movie in the library",
+			ReadOnlyHint:    false,
+			DestructiveHint: ptr(false),
+			OpenWorldHint:   ptr(true),
+			IdempotentHint:  true,
+		},
+		Description: "Asks Radarr to search its indexers right now for a movie that is ALREADY " +
+			"in the library, and grab what it finds — the Search button of Radarr's own UI. " +
+			"This is what to use when a movie is monitored and missing, including after a " +
+			"download was removed from the queue: radarr_movie_add would be refused with 'This " +
+			"movie has already been added', because adding is not what is being asked for. " +
+			"Takes Radarr's movie_id from radarr_library_status, which is NOT the TMDB id. Not " +
+			"to be confused with radarr_movie_lookup, which searches TMDB for a film to add. " +
+			"Asks the user first.",
+	}, handleRadarrSearch)
+
+	sdk.AddTool(s, &sdk.Tool{
+		Name: "radarr_movie_remove",
+		Annotations: &sdk.ToolAnnotations{
+			Title:           "Remove a movie from the Radarr library",
+			ReadOnlyHint:    false,
+			DestructiveHint: ptr(true),
+			OpenWorldHint:   ptr(false),
+		},
+		Description: "Removes a movie from Radarr's library and, by default, deletes the " +
+			"downloaded files from disk — 'delete_files' defaults to TRUE, so this frees the " +
+			"space. Pass delete_files=false when the user wants the movie out of the library " +
+			"but the files kept; file deletion cannot be undone. Takes the movie's id from " +
+			"radarr_library_status — Radarr's own 'id' field, though a TMDB id is accepted and " +
+			"resolved. Asks the user first, naming the film, the folder and how much disk is " +
+			"about to be freed.",
+	}, handleRadarrMovieRemove)
+
+	sdk.AddTool(s, &sdk.Tool{
+		Name: "radarr_queue_remove",
+		Annotations: &sdk.ToolAnnotations{
+			Title:           "Remove a download from the Radarr queue",
+			ReadOnlyHint:    false,
+			DestructiveHint: ptr(true),
+			OpenWorldHint:   ptr(false),
+		},
+		Description: "Removes one item from Radarr's download queue, by default deleting the " +
+			"partial download from the download client too. Use it for a download that has " +
+			"failed, stalled, or cannot be imported. The queue_id must come from a fresh " +
+			"radarr_queue_status: Radarr reassigns those ids whenever the queue refreshes. Asks " +
+			"the user before removing anything, naming the film and how far the download had got.",
+	}, handleRadarrQueueRemove)
 }
