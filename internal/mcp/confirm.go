@@ -2,6 +2,9 @@ package mcp
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"os"
@@ -77,6 +80,18 @@ func logClientIdentity(_ context.Context, req *sdk.InitializedRequest) {
 
 	log.Printf("client connected: name=%q; confirmations for actions: %s",
 		clientName(req.Session), confirmation)
+}
+
+// fingerprint identifies one operation across the confirmation round trip. The
+// first part is the tool name, so an approval given for one tool cannot satisfy
+// another; the rest are whatever decides what the operation does.
+func fingerprint(parts ...string) string {
+	h := sha256.New()
+	for _, p := range parts {
+		binary.Write(h, binary.BigEndian, uint32(len(p)))
+		h.Write([]byte(p))
+	}
+	return hex.EncodeToString(h.Sum(nil))[:32]
 }
 
 // approval describes one thing the user is being asked to approve.
