@@ -3,9 +3,9 @@
 An [MCP](https://modelcontextprotocol.io) server that exposes a Linux home server
 to an AI assistant: system health, Docker containers, Radarr and Sonarr.
 
-It is a single static Go binary that speaks MCP over **stdio**. Point any MCP client at it
-(Claude Code, Claude Desktop, the MCP Inspector) and you can ask *"is my server running out
-of disk?"* — or *"why hasn't Dune downloaded?"* — instead of SSH-ing in.
+It is a single static Go binary that speaks MCP over **stdio** or over **HTTP**. Point any MCP
+client at it (Claude Code, Claude Desktop, the MCP Inspector) and you can ask *"is my server
+running out of disk?"* — or *"why hasn't Dune downloaded?"* — instead of SSH-ing in.
 
 ## Tools
 
@@ -83,6 +83,7 @@ changing any of them.
 | `HOMELAB_MCP_SONARR_READONLY` | drops Sonarr's five writes | [tools/SONARR.md](tools/SONARR.md#configuration) |
 | `HOMELAB_MCP_TRUST_CLIENT_CONFIRMATION` | acting on clients that cannot show a server confirmation | [below](#approving-actions) |
 | `HOMELAB_MCP_ENV_FILE` | an explicit path to the `.env` | [below](#a-env-file) |
+| `HOMELAB_MCP_HTTP_ADDR` + `HOMELAB_MCP_HTTP_TOKEN` | the HTTP transport, instead of stdio | [below](#over-http-instead) |
 
 ### A `.env` file
 
@@ -238,6 +239,119 @@ that is not the one running the client:
 This requires key-based SSH auth — there is no terminal to type a password into. Configure the
 remote machine itself, not the `env` block here.
 
+### Over HTTP instead
+
+SSH costs a whole server process per client, and the client has to be able to exec a binary on
+the other machine. The alternative is the MCP **Streamable HTTP** transport: one long-lived
+process serving every client that can reach the address, with the `.env` staying on the server
+where the key belongs.
+
+Set an address and a token, and the transport changes:
+
+```sh
+# .env on the server
+HOMELAB_MCP_HTTP_ADDR=100.101.102.103:8080   # this host's tailscale address
+HOMELAB_MCP_HTTP_TOKEN=<openssl rand -hex 32>
+```
+
+```
+[homelab-mcp] MCP server running on transport streamable http at http://100.101.102.103:8080/mcp (sessionless, protocol 2026-07-28, bearer token required)
+```
+
+Every request must carry `Authorization: Bearer <token>`; anything else gets a 401 and never
+reaches a tool. **Write the host part explicitly.** A bare `:8080` binds every interface the
+machine has, including the one facing your LAN.
+
+The token is not optional and there is no flag that makes it optional — the server refuses to
+start without one. A private bind address is not authentication: it is a bet that nothing
+hostile is on that network, and a tailnet holds every device of every user your ACLs admit,
+plus whatever runs on this host.
+
+#### It is sessionless, and that needs a current client
+
+Revision **2026-07-28** of the MCP spec removed protocol-level sessions, the GET stream and
+server-to-client requests. Client identity and capabilities now ride in the `_meta` of every
+request, and the server asks the user for input by returning `inputRequests` for the client to
+retry — which is how the [confirmation round trip](#approving-actions) here already worked, so
+it needs nothing a session would hold.
+
+The HTTP transport implements that revision and only that one. This is not a setting: the SDK
+rejects a `2026-07-28` request outright on a server that keeps sessions, so serving the current
+protocol and keeping sessions are mutually exclusive, and there is no switch for the other side.
+Restarting the process invalidates nothing, since there is no session id for a client to lose.
+
+A client on an older protocol still connects, and every read-only tool answers it. What it
+cannot do is the [eleven writes](#approving-actions): it declares its capabilities once, in
+`initialize`, and a sessionless server keeps nothing from that — so the server cannot tell
+whether it could be shown a confirmation, and it does not act without one. It refuses with
+`this client ("") cannot show a confirmation coming from the server`, where the empty name is
+itself the symptom. Reach that client over stdio instead, where the session exists.
+
+Note also that the `client connected:` startup line belongs to the old handshake, so over HTTP
+it never appears.
+
+Run it under systemd, since nothing execs it any more:
+
+```ini
+[Service]
+ExecStart=/opt/homelab-mcp/bin/server
+EnvironmentFile=/opt/homelab-mcp/.env
+Restart=always
+```
+
+#### Behind Tailscale
+
+Binding to the tailnet address, as above, is already enough: the port exists only inside your
+tailnet, and nothing on your LAN or the internet can route to it. Restrict it further with a
+Tailscale ACL — device authentication is not user authorisation, which is the other reason the
+bearer token is required.
+
+For a real TLS certificate and a name instead of an IP, bind loopback and put `tailscale serve`
+in front:
+
+```sh
+# HOMELAB_MCP_HTTP_ADDR=127.0.0.1:8080
+tailscale serve --bg --https=443 --set-path=/mcp http://127.0.0.1:8080/mcp
+```
+
+That gives you `https://homelab.your-tailnet.ts.net/mcp`, reachable from your tailnet only, with
+the `Authorization` header passed straight through. Never `tailscale funnel` — that publishes
+these tools to the open internet.
+
+#### Pointing clients at it
+
+**Claude Code**, and any client that speaks HTTP natively:
+
+```sh
+claude mcp add --transport http homelab https://homelab.your-tailnet.ts.net/mcp \
+  --header "Authorization: Bearer $HOMELAB_MCP_HTTP_TOKEN"
+```
+
+**Claude Desktop** needs a bridge. Its custom connectors will not work here: that connection is
+made from Anthropic's servers rather than from your machine, so it cannot reach a tailnet
+address — and `claude_desktop_config.json` itself accepts stdio servers only. `mcp-remote` is a
+stdio server that speaks HTTP on the other side, and it runs on your machine, which is the one
+on the tailnet:
+
+```json
+{
+  "mcpServers": {
+    "homelab": {
+      "command": "npx",
+      "args": [
+        "-y", "mcp-remote",
+        "https://homelab.your-tailnet.ts.net/mcp",
+        "--header", "Authorization: Bearer ${HOMELAB_MCP_TOKEN}"
+      ],
+      "env": { "HOMELAB_MCP_TOKEN": "your-token" }
+    }
+  }
+}
+```
+
+Note that the `env` block *does* work here, unlike over SSH — the variable is read by a local
+process, so nothing has to survive a hop.
+
 ## Documentation
 
 ```
@@ -255,9 +369,10 @@ docs/      how it is built and why — the design
 ## Project layout
 
 ```
-cmd/server/          entrypoint: .env loading, signal handling, stdio transport
+cmd/server/          entrypoint: .env loading, signal handling, transport choice
 internal/dotenv/     reads a .env into the environment before anything is registered
-internal/mcp/        MCP layer — tool registration, schemas, text rendering, confirmation
+internal/mcp/        MCP layer — tool registration, schemas, text rendering, confirmation,
+                     and the HTTP transport with its bearer auth
 internal/system/     collection layer — gopsutil calls, no MCP types
 internal/services/   systemd units, over systemctl
 internal/containers/ docker, over the Engine API on the unix socket

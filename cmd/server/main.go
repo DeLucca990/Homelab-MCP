@@ -26,13 +26,20 @@ func main() {
 
 	server := mcpserver.New()
 
-	log.Println("MCP server running on transport stdio")
-
-	if err := server.Run(ctx, &sdk.StdioTransport{}); err != nil {
+	if err := run(ctx, server); err != nil {
 		log.Fatalf("server stopped with error: %v", err)
 	}
 
 	log.Println("server stopped")
+}
+
+func run(ctx context.Context, server *sdk.Server) error {
+	if addr := mcpserver.HTTPAddr(); addr != "" {
+		return mcpserver.ServeHTTP(ctx, server, addr)
+	}
+
+	log.Println("MCP server running on transport stdio")
+	return server.Run(ctx, &sdk.StdioTransport{})
 }
 
 func loadEnvFile() {
