@@ -1,7 +1,7 @@
 # Homelab MCP
 
 An [MCP](https://modelcontextprotocol.io) server that exposes a Linux home server
-to an AI assistant: system health, Docker containers, and Radarr.
+to an AI assistant: system health, Docker containers, Radarr and Sonarr.
 
 It is a single static Go binary that speaks MCP over **stdio**. Point any MCP client at it
 (Claude Code, Claude Desktop, the MCP Inspector) and you can ask *"is my server running out
@@ -9,7 +9,7 @@ of disk?"* — or *"why hasn't Dune downloaded?"* — instead of SSH-ing in.
 
 ## Tools
 
-**17 tools in three families, and never all at once.** A default install registers 7; the
+**27 tools in four families, and never all at once.** A default install registers 7; the
 rest appear only when the environment authorises them. Full specifications, one page per
 family:
 
@@ -18,6 +18,7 @@ family:
 | **System** | host info, CPU, memory, disk, systemd units | [tools/SYSTEM.md](tools/SYSTEM.md) |
 | **Docker** | container status, logs, and — opt-in — exec and restart | [tools/DOCKER.md](tools/DOCKER.md) |
 | **Radarr** | library, queue, lookup, health, and four writes | [tools/RADARR.md](tools/RADARR.md) |
+| **Sonarr** | library, missing episodes, queue, lookup, health, and five writes | [tools/SONARR.md](tools/SONARR.md) |
 
 What they are for, in one line each: [tools/README.md](tools/README.md).
 
@@ -37,6 +38,11 @@ Radarr will not tell you:
   on disk with the movie still missing.
 - **A film that is late versus one that is not out.** Radarr shows both as monitored with no
   file; only one of them is a problem.
+- **A series is never simply there.** "Monitored" says nothing about a show with 59 of its
+  62 episodes on disk — the answer is a count, and which three are missing is a level below
+  that again.
+- **One download, fourteen queue rows.** A Sonarr season pack is a single file that appears
+  once per episode it holds, so removing any one of those rows removes all of them.
 
 ## Requirements
 
@@ -73,6 +79,8 @@ changing any of them.
 | `HOMELAB_MCP_ALLOW_CONTAINER_NAMES` | `docker_container_exec`, `docker_container_restart` | [tools/DOCKER.md](tools/DOCKER.md#turning-them-on) |
 | `SERVER_URL` + `RADARR_API_KEY` | the whole Radarr family | [tools/RADARR.md](tools/RADARR.md#configuration) |
 | `HOMELAB_MCP_RADARR_READONLY` | drops Radarr's four writes | [tools/RADARR.md](tools/RADARR.md#configuration) |
+| `SERVER_URL` + `SONARR_API_KEY` | the whole Sonarr family | [tools/SONARR.md](tools/SONARR.md#configuration) |
+| `HOMELAB_MCP_SONARR_READONLY` | drops Sonarr's five writes | [tools/SONARR.md](tools/SONARR.md#configuration) |
 | `HOMELAB_MCP_TRUST_CLIENT_CONFIRMATION` | acting on clients that cannot show a server confirmation | [below](#approving-actions) |
 | `HOMELAB_MCP_ENV_FILE` | an explicit path to the `.env` | [below](#a-env-file) |
 
@@ -84,9 +92,14 @@ with a clone: a `.env` at the root of the repo, read on startup.
 ```sh
 # .env — chmod 600, and already in .gitignore
 SERVER_URL=http://localhost
-RADARR_API_KEY=your-key-here
+RADARR_API_KEY=your-radarr-key
+SONARR_API_KEY=your-sonarr-key
 HOMELAB_MCP_ALLOW_CONTAINER_NAMES=jellyfin,sonarr,radarr
 ```
+
+One `SERVER_URL` serves both services because each fills in its own port — Radarr's 7878,
+Sonarr's 8989 — so keep it a bare host. Written with a port (`http://nas:7878`) it can only
+reach one of them.
 
 `make build` and run — no wrapper, no shell. The rules:
 
@@ -126,9 +139,10 @@ server warns at startup if the `.env` it read is not `chmod 600`.
 The server states what it found on startup, on stderr, in your client's MCP log:
 
 ```
-[homelab-mcp] env file /home/ubuntu/repos/Homelab-MCP/.env: set SERVER_URL, RADARR_API_KEY
+[homelab-mcp] env file /home/ubuntu/repos/Homelab-MCP/.env: set SERVER_URL, RADARR_API_KEY, SONARR_API_KEY
 [homelab-mcp] env file /home/ubuntu/repos/Homelab-MCP/.env: SERVER_URL already set in the environment, left alone
 [homelab-mcp] radarr at http://localhost:7878: read and write
+[homelab-mcp] sonarr at http://localhost:8989: read and write
 [homelab-mcp] client connected: name="claude-ai"; confirmations for actions: server-side, per command
 ```
 
@@ -138,10 +152,10 @@ registered, so it is telling the truth.
 
 ## Approving actions
 
-Seven tools change something, and none of them act on the first call. They describe the
+Eleven tools change something, and none of them act on the first call. They describe the
 operation, wait for a decision, and bind the approval to that exact operation with a
-fingerprint — so approving `ls /config` cannot execute `rm -rf /config`, and approving one
-film cannot add another.
+fingerprint — so approving `ls /config` cannot execute `rm -rf /config`, approving one
+film cannot add another, and approving a search of season 3 cannot search all nine seasons.
 
 Which side asks depends on the client:
 
@@ -234,9 +248,9 @@ docs/      how it is built and why — the design
 | | |
 | --- | --- |
 | [tools/README.md](tools/README.md) | the tool index and the conventions every tool shares |
-| [tools/SYSTEM.md](tools/SYSTEM.md) · [tools/DOCKER.md](tools/DOCKER.md) · [tools/RADARR.md](tools/RADARR.md) | per-family reference |
+| [tools/SYSTEM.md](tools/SYSTEM.md) · [tools/DOCKER.md](tools/DOCKER.md) · [tools/RADARR.md](tools/RADARR.md) · [tools/SONARR.md](tools/SONARR.md) | per-family reference |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | layering, tool registration, the confirmation round trip, the fingerprint |
-| [docs/modules/](docs/modules/) | one page per integration: [system](docs/modules/system.md), [docker](docs/modules/docker.md), [radarr](docs/modules/radarr.md) |
+| [docs/modules/](docs/modules/) | one page per integration: [system](docs/modules/system.md), [docker](docs/modules/docker.md), [radarr](docs/modules/radarr.md), [sonarr](docs/modules/sonarr.md) |
 
 ## Project layout
 
@@ -248,6 +262,7 @@ internal/system/     collection layer — gopsutil calls, no MCP types
 internal/services/   systemd units, over systemctl
 internal/containers/ docker, over the Engine API on the unix socket
 internal/radarr/     radarr, over its v3 HTTP API
+internal/sonarr/     sonarr, over its v3 HTTP API
 ```
 
 The split is deliberate: the collectors know nothing about MCP, so they stay testable and
@@ -259,8 +274,10 @@ go test ./...
 ```
 
 covers the Radarr client against a mock Radarr — URL normalisation, queue classification,
-missing versus unreleased, id resolution and every refusal the add path makes — and the `.env`
-loader's parsing, precedence and search order.
+missing versus unreleased, id resolution and every refusal the add path makes — and the same
+for Sonarr, plus what is only true there: episode counting, season packs sharing one
+download, and the three search scopes hashing apart so an approval for one season cannot run
+against a whole series.
 
 ## Built with
 
