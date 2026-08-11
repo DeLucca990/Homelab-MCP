@@ -9,12 +9,13 @@ specification.
 | System | 5, all read-only | [SYSTEM.md](SYSTEM.md) |
 | Docker | 4 — 2 read-only, 2 opt-in actions | [DOCKER.md](DOCKER.md) |
 | Radarr | 8 — 4 read-only, 4 writes | [RADARR.md](RADARR.md) |
+| Sonarr | 10 — 5 read-only, 5 writes | [SONARR.md](SONARR.md) |
 
-**17 tools in total, but never all at once.** A default install registers
+**27 tools in total, but never all at once.** A default install registers
 **7**: the five system tools and the two read-only Docker ones. The rest appear
 only when the environment says so — the Docker actions need an allowlist, the
-Radarr family needs a URL and an API key. A tool that is not registered does not
-appear in `tools/list`, so it cannot be called by mistake.
+Radarr and Sonarr families each need a URL and an API key. A tool that is not
+registered does not appear in `tools/list`, so it cannot be called by mistake.
 
 ## What every tool has in common
 
@@ -37,10 +38,11 @@ listings are capped. What was cut is stated in the result, because silent
 truncation reads as a complete answer.
 
 **Worst first.** Every listing that can contain a problem — services,
-containers, the download queue, the movie library — is sorted by severity rather
-than by name, so the reason someone is looking is at the top.
+containers, the download queue, the movie library, the series library — is
+sorted by severity rather than by name, so the reason someone is looking is at
+the top.
 
-**Writes ask first.** The seven tools that change something never act on the
+**Writes ask first.** The eleven tools that change something never act on the
 first call. They describe the operation, wait for a human decision, and bind the
 approval to the exact operation with a fingerprint. See
 [docs/ARCHITECTURE.md §3](../docs/ARCHITECTURE.md#3-waiting-for-a-user-response).
@@ -53,3 +55,13 @@ approval to the exact operation with a fingerprint. See
 | `radarr_movie_search` | Radarr | confirmation |
 | `radarr_movie_remove` | Radarr | confirmation |
 | `radarr_queue_remove` | Radarr | confirmation |
+| `sonarr_series_add` | Sonarr | confirmation |
+| `sonarr_season_monitor` | Sonarr | confirmation |
+| `sonarr_series_search` | Sonarr | confirmation |
+| `sonarr_series_remove` | Sonarr | confirmation |
+| `sonarr_queue_remove` | Sonarr | confirmation |
+
+**A confirmation states the size, not just the name.** Where an operation's
+arguments hide how much it does — `sonarr_series_add` with `monitor: all` is a
+whole back catalogue, one Sonarr queue row can be a fourteen-episode season pack
+— the count is in the message the human reads, and in the fingerprint.

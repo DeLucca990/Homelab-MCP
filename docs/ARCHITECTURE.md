@@ -11,6 +11,7 @@ next to it:
 | System and systemd | [modules/system.md](modules/system.md) | [tools/SYSTEM.md](../tools/SYSTEM.md) |
 | Docker | [modules/docker.md](modules/docker.md) | [tools/DOCKER.md](../tools/DOCKER.md) |
 | Radarr | [modules/radarr.md](modules/radarr.md) | [tools/RADARR.md](../tools/RADARR.md) |
+| Sonarr | [modules/sonarr.md](modules/sonarr.md) | [tools/SONARR.md](../tools/SONARR.md) |
 
 Written against `github.com/modelcontextprotocol/go-sdk` **v1.7.0**. The
 multi-round-trip behaviour described in §3 is SDK- and protocol-version
@@ -28,6 +29,7 @@ internal/system/          host, CPU, memory, disk            (gopsutil)
 internal/services/        systemd units                      (systemctl)
 internal/containers/      docker                             (Engine API over the unix socket)
 internal/radarr/          radarr                             (v3 HTTP API)
+internal/sonarr/          sonarr                             (v3 HTTP API)
 ```
 
 One rule holds the layering together: **`internal/mcp` never touches the OS, and
@@ -120,6 +122,7 @@ stronger guarantee than one that exists and refuses:
 if allowed := containers.ActionAllowlist(); len(allowed) > 0 { ... }  // docker actions
 if radarr.Configured() { ... }                                       // the radarr family
 if radarr.ReadOnly() { return }                                      // its four writes
+if sonarr.Configured() { ... }                                       // and the same, per service
 ```
 
 **Which means the environment must be complete before `New()` is called.**
@@ -131,13 +134,17 @@ configuration — an MCP client execs it directly, with no shell to source
 anything, and a client's `env` block does not survive an ssh hop. Whatever the
 operator supplied deliberately still wins.
 
-The result is 7 tools on a default install and up to 17 fully configured:
+The result is 7 tools on a default install and up to 27 fully configured:
 
 | Family | Always | Needs config | Confirms |
 |---|---|---|---|
 | System (5) | all | – | – |
 | Docker (4) | status, logs | exec, restart — **allowlist** | exec, restart |
 | Radarr (8) | – | all — **URL + API key** | add, search, remove, queue_remove |
+| Sonarr (10) | – | all — **URL + API key** | add, season_monitor, search, remove, queue_remove |
+
+The two `*arr` families gate independently: one configured and the other not is a
+normal install, and each has its own key and its own read-only switch.
 
 ---
 
@@ -301,7 +308,8 @@ happen**. A model that paraphrases an error loosely still cannot turn it into
 The first two are the ones that hold regardless of how a client or a model
 behaves. What each module gates on is in its own page:
 [docker](modules/docker.md#the-three-layers),
-[radarr](modules/radarr.md#configuration-and-reachability).
+[radarr](modules/radarr.md#configuration-and-reachability),
+[sonarr](modules/sonarr.md#configuration).
 
 ### 4.2 The fingerprint
 
@@ -381,14 +389,23 @@ that was shown to the human.
 The Docker tools hash arguments the caller supplied, and that is enough because
 `(container, argv)` says everything about what will happen.
 
-The Radarr tools cannot: `tmdb_id: 438631` and `queue_id: 9` mean whatever Radarr
-currently says they mean, and Radarr changes underneath. So those handlers
-**resolve first and hash the resolution** — the film, the quality profile, the
-folder, the queue item's title — on both passes. The human then approves "Dune
-(2021) at UHD-2160p into /movies" rather than a number, and state that moved
-between the confirmation and the retry produces a mismatch instead of an action
-against different values. Worked examples in
+The Radarr and Sonarr tools cannot: `tmdb_id: 438631` and `queue_id: 9` mean
+whatever the service currently says they mean, and the service changes
+underneath. So those handlers **resolve first and hash the resolution** — the
+film, the quality profile, the folder, the queue item's title — on both passes.
+The human then approves "Dune (2021) at UHD-2160p into /movies" rather than a
+number, and state that moved between the confirmation and the retry produces a
+mismatch instead of an action against different values. Worked examples in
 [modules/radarr.md](modules/radarr.md#adding-resolve-first-act-second).
+
+Sonarr adds a second thing to hash, because there the arguments hide **how much**
+an operation does as well as what it touches. `sonarr_series_search` is one tool
+over three Sonarr commands, so the resolved scope — series, season, sorted
+episode ids — is what gets fingerprinted, and an approval for one season cannot
+execute against the whole series. Likewise the number of episodes riding on a
+queue row: a row that was one episode when it was shown and a fourteen-episode
+season pack by the time it was approved is a different removal, and hashes as
+one. See [modules/sonarr.md](modules/sonarr.md#scale-is-part-of-the-operation).
 
 The general shape: **a confirmation is only worth as much as the distance between
 what the human read and what the code then did.**
@@ -417,10 +434,11 @@ silent. Silent truncation reads as a complete answer.
 | exec output | 16 KiB, truncation reported | |
 | log output | 16 KiB, truncation reported | |
 | restart settle | 15s, 3s stable window | Docker reports "running" the instant the process spawns |
-| Radarr API timeout | 10s | answered from Radarr's local database |
-| Radarr lookup timeout | 30s | proxied to TMDB over the internet |
-| Radarr queue page | 200 items | the API pages at 10 |
-| Radarr library listing | 25 default, 200 max | a full dump buries the answer |
+| Radarr/Sonarr API timeout | 10s | answered from the service's local database |
+| Radarr/Sonarr lookup timeout | 30s | proxied to a metadata service over the internet |
+| Radarr/Sonarr queue page | 200 items | the API pages at 10 |
+| Radarr/Sonarr library listing | 25 default, 200 max | a full dump buries the answer |
+| Sonarr episode listing | 25 default, 200 max | a library-wide Wanted list runs to thousands |
 
 ---
 
@@ -430,6 +448,8 @@ silent. Silent truncation reads as a complete answer.
 |---|---|
 | Model says it has no action tools | Allowlist unset in the environment the server actually got — for an SSH-launched server, the `env` block in the client config reaches only the local `ssh` process, not the remote one |
 | Model says it has no Radarr tools | One of `SERVER_URL` / `RADARR_API_KEY` is unset, or the URL would not parse — the connect-time log says which |
+| Model says it has no Sonarr tools | Same, for `SERVER_URL` / `SONARR_API_KEY` |
+| Radarr answers but Sonarr does not (or the reverse) | `SERVER_URL` names a port, so it can only reach one of them — it has to stay a bare host for both to resolve their own |
 | `Failed to call tool` on an action | Client declares no elicitation and `HOMELAB_MCP_TRUST_CLIENT_CONFIRMATION` is unset — see the connect-time log line |
 | Approved but refused | Fingerprint mismatch: the retry carried different arguments — or, for Radarr, the state it resolved against moved (§4.3) |
 | A warning is missing from one client | It was built in the renderer instead of the collector (§1) |
@@ -448,6 +468,7 @@ silent. Silent truncation reads as a complete answer.
 | Change the confirmation flow itself | `internal/mcp/confirm.go` — one place, on purpose |
 | Change table formatting | `internal/mcp/render.go` |
 | Change what may be acted on | `internal/containers/allowlist.go` |
-| Change how Radarr is addressed or authenticated | `internal/radarr/client.go` |
-| Change what is resolved before an add is approved | `radarr.Plan` in `internal/radarr/add.go` |
+| Change how Radarr or Sonarr is addressed or authenticated | `internal/radarr/client.go`, `internal/sonarr/client.go` |
+| Change what is resolved before an add is approved | `radarr.Plan` / `sonarr.Plan` in the module's `add.go` |
+| Change how much a Sonarr search covers | `sonarr.ResolveSearch` in `internal/sonarr/search.go` |
 | Change where configuration is read from | `internal/dotenv/` |

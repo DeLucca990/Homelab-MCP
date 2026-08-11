@@ -26,8 +26,10 @@ address that cannot be parsed is different — nothing built on it could ever wo
 ### Normalising the URL
 
 `SERVER_URL` is deliberately not named for Radarr. It says where the home server
-is, and each integration resolves its own service against it, which is what lets
-a future Sonarr or qBittorrent module share the same variable.
+is, and each integration resolves its own service against it — which is what lets
+[the Sonarr module](sonarr.md) share the same variable and fill in 8989 instead.
+The one condition is that it stays a bare host; written with a port it can only
+address one of the two.
 
 `normalizeBaseURL` applies exactly one judgement call: a bare `http` host with no
 port and no path gets `:7878`. Anything that names a port, carries a path (a

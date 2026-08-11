@@ -8,6 +8,7 @@ import (
 
 	"github.com/DeLucca990/homelab-mcp/internal/containers"
 	"github.com/DeLucca990/homelab-mcp/internal/radarr"
+	"github.com/DeLucca990/homelab-mcp/internal/sonarr"
 )
 
 func registerTools(s *sdk.Server) {
@@ -139,6 +140,7 @@ func registerTools(s *sdk.Server) {
 	}
 
 	registerRadarrTools(s)
+	registerSonarrTools(s)
 }
 
 // RADARR tools
@@ -288,4 +290,196 @@ func registerRadarrTools(s *sdk.Server) {
 			"radarr_queue_status: Radarr reassigns those ids whenever the queue refreshes. Asks " +
 			"the user before removing anything, naming the film and how far the download had got.",
 	}, handleRadarrQueueRemove)
+}
+
+// SONARR tools
+func registerSonarrTools(s *sdk.Server) {
+	if !sonarr.Configured() {
+		return
+	}
+
+	base, err := sonarr.BaseURL()
+	if err != nil {
+		log.Printf("sonarr tools not registered: %v", err)
+		return
+	}
+
+	mode := "read and write"
+	if sonarr.ReadOnly() {
+		mode = "read-only (" + sonarr.ReadOnlyEnv + " is set)"
+	}
+	log.Printf("sonarr at %s: %s", base, mode)
+
+	// sonarr lookup tool
+	sdk.AddTool(s, &sdk.Tool{
+		Name: "sonarr_series_lookup",
+		Annotations: &sdk.ToolAnnotations{
+			Title:        "Sonarr Series Lookup",
+			ReadOnlyHint: true,
+		},
+		Description: "Searches TheTVDB through Sonarr and returns candidate series with their " +
+			"TVDB ids, season counts and whether each is already in the library. This is the " +
+			"first step of adding anything: sonarr_series_add takes a tvdb_id, because a title " +
+			"on its own does not identify a show — 'The Office' is four of them. Changes nothing.",
+	}, handleSonarrLookup)
+
+	// sonarr library tool
+	sdk.AddTool(s, &sdk.Tool{
+		Name: "sonarr_library_status",
+		Annotations: &sdk.ToolAnnotations{
+			Title:        "Sonarr Library Status",
+			ReadOnlyHint: true,
+		},
+		Description: "Returns what Sonarr is monitoring and how complete each series is — " +
+			"episodes on disk out of episodes it owes you — least complete first. Pass 'term' " +
+			"to ask about one show, which also returns a per-season breakdown showing which " +
+			"season is short. Unlike a film, a series is almost never simply present or " +
+			"absent, so 'monitored' answers nothing on its own and the counts are the answer.",
+	}, handleSonarrLibrary)
+
+	// sonarr missing episodes tool
+	sdk.AddTool(s, &sdk.Tool{
+		Name: "sonarr_missing_episodes",
+		Annotations: &sdk.ToolAnnotations{
+			Title:        "Sonarr Missing Episodes",
+			ReadOnlyHint: true,
+		},
+		Description: "Returns the individual episodes Sonarr is monitoring, has seen air, and " +
+			"has not downloaded — its own Wanted list, most recently aired first. This is the " +
+			"level below sonarr_library_status: that one says a series is short three episodes, " +
+			"this one says which three, when they aired and whether anything has ever searched " +
+			"for them. Pass 'series_id' for one show. The episode ids it returns are what " +
+			"sonarr_series_search takes to grab a single episode.",
+	}, handleSonarrMissing)
+
+	// sonarr queue tool
+	sdk.AddTool(s, &sdk.Tool{
+		Name: "sonarr_queue_status",
+		Annotations: &sdk.ToolAnnotations{
+			Title:        "Sonarr Download Queue",
+			ReadOnlyHint: true,
+		},
+		Description: "Returns Sonarr's download queue with the progress of each item, worst " +
+			"first. Beyond the percentage it reports the two states a progress bar hides: a " +
+			"download that is stalled — still incomplete, with the client reporting no time " +
+			"remaining, so nothing is arriving — and one that finished but could not be " +
+			"imported, where the file is on disk and the episode is still missing from the " +
+			"library. Note that one download is not one row: a season pack appears once per " +
+			"episode it holds, all sharing a download id.",
+	}, handleSonarrQueue)
+
+	// sonarr health tool
+	sdk.AddTool(s, &sdk.Tool{
+		Name: "sonarr_system_health",
+		Annotations: &sdk.ToolAnnotations{
+			Title:        "Sonarr System Health",
+			ReadOnlyHint: true,
+		},
+		Description: "Returns Sonarr's version, uptime, root folders and its own failing health " +
+			"checks. This is the answer to 'no episode has arrived all week and everything " +
+			"looks fine': the container can be up and healthy while every indexer it has is " +
+			"refusing to answer or its download client is unreachable, and Sonarr records " +
+			"exactly that here.",
+	}, handleSonarrHealth)
+
+	if sonarr.ReadOnly() {
+		return
+	}
+
+	// sonarr add + search + removal tools
+	sdk.AddTool(s, &sdk.Tool{
+		Name: "sonarr_series_add",
+		Annotations: &sdk.ToolAnnotations{
+			Title:           "Add a series to Sonarr",
+			ReadOnlyHint:    false,
+			DestructiveHint: ptr(false),
+			OpenWorldHint:   ptr(true),
+			IdempotentHint:  true,
+		},
+		Description: "Adds a series to Sonarr and, by default, starts searching for every " +
+			"monitored episode immediately. Takes the tvdb_id from sonarr_series_lookup — call " +
+			"that first, and do not guess an id. The parameter that decides the size of this is " +
+			"'monitor': it defaults to 'all', which on a long-running show means downloading the " +
+			"entire back catalogue — pass 'future' for a show wanted only from now on, or " +
+			"'firstSeason' to try one season first. Quality defaults to the HD-1080p profile. " +
+			"The root folder may be omitted only when Sonarr has exactly one, because it decides " +
+			"which disk fills up. Asks the user before adding anything, showing the show, how " +
+			"many seasons it has and the destination it resolved.",
+	}, handleSonarrAdd)
+
+	sdk.AddTool(s, &sdk.Tool{
+		Name: "sonarr_series_search",
+		Annotations: &sdk.ToolAnnotations{
+			Title:           "Search for releases of a series in the library",
+			ReadOnlyHint:    false,
+			DestructiveHint: ptr(false),
+			OpenWorldHint:   ptr(true),
+			IdempotentHint:  true,
+		},
+		Description: "Asks Sonarr to search its indexers right now for a series that is ALREADY " +
+			"in the library, and grab what it finds — the Search button of Sonarr's own UI. " +
+			"This is what to use when episodes are monitored and missing, including after a " +
+			"download was removed from the queue: sonarr_series_add would be refused with 'This " +
+			"series has already been added', because adding is not what is being asked for. " +
+			"Searches the whole series by default; pass 'season' for one season, or " +
+			"'episode_ids' from sonarr_missing_episodes for specific episodes — the whole-series " +
+			"form on a long-running show is hundreds of grabs at once. Takes Sonarr's series_id " +
+			"from sonarr_library_status, which is NOT the TVDB id. Asks the user first.",
+	}, handleSonarrSearch)
+
+	sdk.AddTool(s, &sdk.Tool{
+		Name: "sonarr_season_monitor",
+		Annotations: &sdk.ToolAnnotations{
+			Title:           "Monitor or unmonitor one season",
+			ReadOnlyHint:    false,
+			DestructiveHint: ptr(false),
+			OpenWorldHint:   ptr(false),
+			IdempotentHint:  true,
+		},
+		Description: "Turns Sonarr's monitoring on or off for ONE season of a series, cascading " +
+			"to every episode of it. This is the switch every other Sonarr tool reads: a search " +
+			"of an unmonitored season finds nothing, because Sonarr filters those episodes out " +
+			"before asking an indexer. It is therefore the missing step in 'download only " +
+			"season 3' — sonarr_series_add can only monitor presets (all, firstSeason, " +
+			"lastSeason, latestSeason, none), so an arbitrary season is added unmonitored and " +
+			"switched on here, then searched with sonarr_series_search. Monitoring does NOT " +
+			"start a search by itself. Defaults to monitoring; pass monitored=false to stop " +
+			"following a season. Deletes nothing. Asks the user first, naming the show, the " +
+			"season and how many episodes the flag covers.",
+	}, handleSonarrSeasonMonitor)
+
+	sdk.AddTool(s, &sdk.Tool{
+		Name: "sonarr_series_remove",
+		Annotations: &sdk.ToolAnnotations{
+			Title:           "Remove a series from the Sonarr library",
+			ReadOnlyHint:    false,
+			DestructiveHint: ptr(true),
+			OpenWorldHint:   ptr(false),
+		},
+		Description: "Removes a series from Sonarr's library and, by default, deletes every " +
+			"downloaded episode from disk — 'delete_files' defaults to TRUE, so this frees the " +
+			"space, and for a series that is every episode of every season. Pass " +
+			"delete_files=false when the user wants the show out of the library but the files " +
+			"kept; file deletion cannot be undone. Takes the series' id from " +
+			"sonarr_library_status — Sonarr's own 'id' field, though a TVDB id is accepted and " +
+			"resolved. Asks the user first, naming the show, the folder, how many episode files " +
+			"are about to go and how much disk that frees.",
+	}, handleSonarrSeriesRemove)
+
+	sdk.AddTool(s, &sdk.Tool{
+		Name: "sonarr_queue_remove",
+		Annotations: &sdk.ToolAnnotations{
+			Title:           "Remove a download from the Sonarr queue",
+			ReadOnlyHint:    false,
+			DestructiveHint: ptr(true),
+			OpenWorldHint:   ptr(false),
+		},
+		Description: "Removes one item from Sonarr's download queue, by default deleting the " +
+			"partial download from the download client too. Use it for a download that has " +
+			"failed, stalled, or cannot be imported. The queue_id must come from a fresh " +
+			"sonarr_queue_status: Sonarr reassigns those ids whenever the queue refreshes. Be " +
+			"aware that one download can be a season pack occupying several queue rows — " +
+			"removing any one of them removes the file behind all of them, and the confirmation " +
+			"says how many episodes that is. Asks the user before removing anything.",
+	}, handleSonarrQueueRemove)
 }
