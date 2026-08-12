@@ -1,15 +1,15 @@
 INSPECTOR := @modelcontextprotocol/inspector@latest
 
-.PHONY: inspect build
+.PHONY: build inspect inspect-open
 
 build:
 	go build -o bin/server ./cmd/server
 
-# inspect: build
-# 	npx $(INSPECTOR) ./bin/server
-
-inspect-open:
-	npx $(INSPECTOR) go run ./cmd/server
+deploy: build
+	sudo systemctl restart homelab-mcp
 
 inspect:
-	MCP_AUTO_OPEN_ENABLED=false npx $(INSPECTOR) go run ./cmd/server
+	MCP_AUTO_OPEN_ENABLED=false npx $(INSPECTOR)
+
+inspect-open:
+	npx $(INSPECTOR)

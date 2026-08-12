@@ -8,8 +8,6 @@ import (
 	"strings"
 	"syscall"
 
-	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
-
 	"github.com/DeLucca990/homelab-mcp/internal/dotenv"
 	mcpserver "github.com/DeLucca990/homelab-mcp/internal/mcp"
 )
@@ -26,9 +24,7 @@ func main() {
 
 	server := mcpserver.New()
 
-	log.Println("MCP server running on transport stdio")
-
-	if err := server.Run(ctx, &sdk.StdioTransport{}); err != nil {
+	if err := mcpserver.ServeHTTP(ctx, server, mcpserver.HTTPAddr()); err != nil {
 		log.Fatalf("server stopped with error: %v", err)
 	}
 
