@@ -3,8 +3,8 @@
 An [MCP](https://modelcontextprotocol.io) server that exposes a Linux home server
 to an AI assistant: system health, Docker containers, Radarr and Sonarr.
 
-It is a single static Go binary that speaks MCP over **stdio** or over **HTTP**. Point any MCP
-client at it (Claude Code, Claude Desktop, the MCP Inspector) and you can ask *"is my server
+It is a single static Go binary that speaks MCP over **Streamable HTTP**. Run it on the machine
+you want to watch, point any MCP client on your tailnet at it, and you can ask *"is my server
 running out of disk?"* — or *"why hasn't Dune downloaded?"* — instead of SSH-ing in.
 
 ## Tools
@@ -49,7 +49,7 @@ Radarr will not tell you:
 - **Go 1.26+** to build ([install](https://go.dev/dl/))
 - **Linux** for the intended target. It compiles and runs on macOS and Windows too, but the
   filtering heuristics (snap packages, Docker layers) and the CPU breakdown assume a Linux host.
-- **Node.js** only if you want to run the MCP Inspector (`make inspect`)
+- **Node.js** only for the MCP Inspector (`make inspect`) or the `mcp-remote` bridge
 
 Docker access needs membership in the `docker` group. The read-only system tools need no
 elevation, and the server runs with the privileges of whoever launches it — normally your MCP
@@ -83,7 +83,7 @@ changing any of them.
 | `HOMELAB_MCP_SONARR_READONLY` | drops Sonarr's five writes | [tools/SONARR.md](tools/SONARR.md#configuration) |
 | `HOMELAB_MCP_TRUST_CLIENT_CONFIRMATION` | acting on clients that cannot show a server confirmation | [below](#approving-actions) |
 | `HOMELAB_MCP_ENV_FILE` | an explicit path to the `.env` | [below](#a-env-file) |
-| `HOMELAB_MCP_HTTP_ADDR` + `HOMELAB_MCP_HTTP_TOKEN` | the HTTP transport, instead of stdio | [below](#over-http-instead) |
+| `HOMELAB_MCP_HTTP_ADDR` + `HOMELAB_MCP_HTTP_TOKEN` | **required** — the address it listens on and the token it demands | [below](#over-http-instead) |
 
 ### A `.env` file
 
@@ -109,8 +109,7 @@ reach one of them.
   be relied on: a client that execs this binary sets it to whatever it happens to be. Point at
   a file elsewhere with `HOMELAB_MCP_ENV_FILE=/path/to/file`, which then must exist.
 - **The environment always wins.** A variable already set is left alone and logged as such, so
-  an ssh command prefix, a systemd `EnvironmentFile` or `VAR=x ./bin/server` still override the
-  file. It is a fallback, not an authority.
+  a systemd `EnvironmentFile` or `VAR=x ./bin/server` still overrides the file. It is a fallback, not an authority.
 - **Syntax**: `KEY=VALUE`, one per line. `#` comments, blank lines and a leading `export` are
   fine. Only the first `=` splits, so a base64 key ending in `=` survives. Quote a value to
   protect spaces or a `#`. A malformed line is an error naming the line number rather than a
@@ -130,10 +129,10 @@ world-readable through `/proc`, so `ps aux` on that machine shows it to any loca
 container allowlist is not a secret and is fine there; a key is not. For the same reason the
 server warns at startup if the `.env` it read is not `chmod 600`.
 
-> ⚠️ **Running over SSH?** An `env` block in your client config sets variables for the local
-> `ssh` process, and SSH does not forward arbitrary variables (that would need `SendEnv` plus a
-> matching `AcceptEnv` in the remote `sshd_config`). Configure the **remote** machine — a `.env`
-> in its clone, a wrapper, or a systemd `EnvironmentFile`.
+> ⚠️ **An `env` block in your client's config does not reach this server.** The client speaks
+> HTTP to a process that was already running, with its own environment — nothing is handed over
+> at connect time. Configure the **machine being monitored**: a `.env` in its clone, or a
+> systemd `EnvironmentFile`.
 
 ### Checking whether it took
 
@@ -177,95 +176,72 @@ The mechanism, and what the fingerprint does and does not protect:
 
 ## Running it
 
-The server talks JSON-RPC over stdin/stdout and logs to **stderr** with the `[homelab-mcp]`
-prefix. Running it by hand just leaves it waiting for a client on stdin:
+The server speaks MCP over **Streamable HTTP** and logs to **stderr** with the `[homelab-mcp]`
+prefix. It is a long-lived process: one of it serves every client that can reach the address,
+so it is started by a service manager, never by a client.
+
+Two variables are required, and it refuses to start without either:
 
 ```sh
-./bin/server
-# [homelab-mcp] MCP server running on transport stdio
-```
-
-It shuts down cleanly on `Ctrl+C` (SIGINT) and on SIGTERM, so it behaves under a process
-supervisor like systemd. Normally you do not launch it yourself — the MCP client spawns it.
-
-### With the MCP Inspector
-
-The fastest way to see it working, no client configuration needed:
-
-```sh
-make inspect        # or: make inspect-open, which opens the browser for you
-```
-
-### With Claude Code
-
-```sh
-claude mcp add homelab -- /absolute/path/to/Homelab-MCP/bin/server
-```
-
-### With Claude Desktop
-
-Add the server to `claude_desktop_config.json` (macOS:
-`~/Library/Application Support/Claude/claude_desktop_config.json`):
-
-```json
-{
-  "mcpServers": {
-    "homelab": {
-      "command": "/absolute/path/to/Homelab-MCP/bin/server"
-    }
-  }
-}
-```
-
-Use an absolute path — the client does not resolve the binary against your shell's `PATH` or
-working directory. Restart the client after editing the config.
-
-### Monitoring a remote server
-
-Because the transport is stdio, you can put SSH in front of the binary and monitor a machine
-that is not the one running the client:
-
-```json
-{
-  "mcpServers": {
-    "homelab": {
-      "command": "ssh",
-      "args": ["user@homelab", "/opt/homelab-mcp/bin/server"]
-    }
-  }
-}
-```
-
-This requires key-based SSH auth — there is no terminal to type a password into. Configure the
-remote machine itself, not the `env` block here.
-
-### Over HTTP instead
-
-SSH costs a whole server process per client, and the client has to be able to exec a binary on
-the other machine. The alternative is the MCP **Streamable HTTP** transport: one long-lived
-process serving every client that can reach the address, with the `.env` staying on the server
-where the key belongs.
-
-Set an address and a token, and the transport changes:
-
-```sh
-# .env on the server
-HOMELAB_MCP_HTTP_ADDR=100.101.102.103:8080   # this host's tailscale address
+# .env, on the machine being monitored
+HOMELAB_MCP_HTTP_ADDR=100.101.102.103:3000   # this host's tailscale address
 HOMELAB_MCP_HTTP_TOKEN=<openssl rand -hex 32>
 ```
 
-```
-[homelab-mcp] MCP server running on transport streamable http at http://100.101.102.103:8080/mcp (sessionless, protocol 2026-07-28, bearer token required)
+```sh
+./bin/server
+# [homelab-mcp] MCP server running on transport streamable http at http://100.101.102.103:3000/mcp
 ```
 
-Every request must carry `Authorization: Bearer <token>`; anything else gets a 401 and never
-reaches a tool. **Write the host part explicitly.** A bare `:8080` binds every interface the
-machine has, including the one facing your LAN.
+**Write the host part explicitly.** A bare `:3000` binds every interface the machine has,
+including the one facing your LAN; the server says so at startup when you do.
 
-The token is not optional and there is no flag that makes it optional — the server refuses to
-start without one. A private bind address is not authentication: it is a bet that nothing
-hostile is on that network, and a tailnet holds every device of every user your ACLs admit,
-plus whatever runs on this host.
+Every request must carry `Authorization: Bearer <token>`, and anything else gets a 401 without
+reaching a tool. The token is not optional and there is no flag that makes it optional. A
+private bind address is not authentication: it is a bet that nothing hostile is on that
+network, and a tailnet holds every device of every user your ACLs admit, plus whatever runs on
+this host.
+
+It shuts down cleanly on `Ctrl+C` (SIGINT) and on SIGTERM, so it behaves under systemd.
+
+### Under systemd
+
+Nothing execs this binary, so something has to keep it alive across logout and reboot. Run it
+in a terminal and it dies with your SSH session:
+
+```ini
+# /etc/systemd/system/homelab-mcp.service
+[Unit]
+Description=Homelab MCP server
+After=network-online.target tailscaled.service
+Wants=network-online.target
+
+[Service]
+ExecStart=/home/ubuntu/repos/Homelab-MCP/bin/server
+User=ubuntu
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```sh
+sudo systemctl daemon-reload && sudo systemctl enable --now homelab-mcp
+journalctl -u homelab-mcp -f
+```
+
+No `EnvironmentFile` is needed: the binary finds the `.env` itself, next to the executable and
+one directory above it. That also avoids the differences between systemd's parser and
+[this one](#a-env-file). The `User=` must be in the `docker` group for the container tools.
+
+Binding a tailscale address races with `tailscaled` on boot, and the bind fails with
+`can't assign requested address` until the interface exists. `Restart=always` rides it out — a
+failed start or two right after a reboot is expected. Binding `127.0.0.1` behind
+[`tailscale serve`](#behind-tailscale) avoids the race entirely.
+
+To update: `git pull && make build && sudo systemctl restart homelab-mcp`. Clients need no
+attention, because there is no session for a restart to invalidate.
 
 #### It is sessionless, and that needs a current client
 
@@ -285,19 +261,11 @@ cannot do is the [eleven writes](#approving-actions): it declares its capabiliti
 `initialize`, and a sessionless server keeps nothing from that — so the server cannot tell
 whether it could be shown a confirmation, and it does not act without one. It refuses with
 `this client ("") cannot show a confirmation coming from the server`, where the empty name is
-itself the symptom. Reach that client over stdio instead, where the session exists.
+itself the symptom. Set `HOMELAB_MCP_TRUST_CLIENT_CONFIRMATION=1` to accept the approval
+prompt that client shows before calling a tool — which is what Claude Desktop needs today.
 
 Note also that the `client connected:` startup line belongs to the old handshake, so over HTTP
 it never appears.
-
-Run it under systemd, since nothing execs it any more:
-
-```ini
-[Service]
-ExecStart=/opt/homelab-mcp/bin/server
-EnvironmentFile=/opt/homelab-mcp/.env
-Restart=always
-```
 
 #### Behind Tailscale
 
@@ -317,6 +285,18 @@ tailscale serve --bg --https=443 --set-path=/mcp http://127.0.0.1:8080/mcp
 That gives you `https://homelab.your-tailnet.ts.net/mcp`, reachable from your tailnet only, with
 the `Authorization` header passed straight through. Never `tailscale funnel` — that publishes
 these tools to the open internet.
+
+#### With the MCP Inspector
+
+The fastest way to see it working, no client configuration needed:
+
+```sh
+make inspect        # or: make inspect-open, which opens the browser for you
+```
+
+It starts with nothing to spawn — this server is connected to, not exec'd. Pick **Streamable
+HTTP** in the UI, paste the URL from the startup line, and add an `Authorization` header with
+`Bearer <token>`.
 
 #### Pointing clients at it
 
@@ -369,7 +349,7 @@ docs/      how it is built and why — the design
 ## Project layout
 
 ```
-cmd/server/          entrypoint: .env loading, signal handling, transport choice
+cmd/server/          entrypoint: .env loading, signal handling, serving
 internal/dotenv/     reads a .env into the environment before anything is registered
 internal/mcp/        MCP layer — tool registration, schemas, text rendering, confirmation,
                      and the HTTP transport with its bearer auth

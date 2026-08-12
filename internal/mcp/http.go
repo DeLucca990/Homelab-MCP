@@ -15,17 +15,14 @@ import (
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// Streamable HTTP, the alternative to stdio.
+// Streamable HTTP, the only transport this server speaks.
 //
-// Over stdio a client has to be able to exec the binary, which off-box means
-// wrapping it in ssh and paying for a whole server process per client. Over
-// HTTP one long-lived process serves every client that can reach the address,
-// the .env stays on the server where the key belongs, and clients that speak
-// HTTP natively (Claude Code, the MCP Inspector, mcp-remote) need no wrapper.
-//
-// What it costs is a listening port. Everything below exists to make that port
-// safe to open: bind it to a private interface, require a token, and refuse to
-// start rather than serve these tools anonymously by accident.
+// One long-lived process serves every client that can reach the address, the
+// .env stays on the machine being monitored, and nothing has to be able to exec
+// a binary over ssh to talk to it. The cost is a listening port, and everything
+// below exists to make that port safe to open: bind it to a private interface,
+// require a token, and refuse to start rather than serve these tools
+// anonymously by accident.
 
 const (
 	HTTPAddrEnv  = "HOMELAB_MCP_HTTP_ADDR"
@@ -45,14 +42,22 @@ const (
 	shutdownGrace = 10 * time.Second
 )
 
-// HTTPAddr reports the configured listen address, empty when the server should
-// speak stdio.
+// HTTPAddr reports the configured listen address.
 func HTTPAddr() string {
 	return strings.TrimSpace(os.Getenv(HTTPAddrEnv))
 }
 
 // ServeHTTP runs the server over Streamable HTTP until ctx is cancelled.
 func ServeHTTP(ctx context.Context, server *sdk.Server, addr string) error {
+	if addr == "" {
+		return fmt.Errorf(
+			"%s is not set: it is the address this server listens on, written as "+
+				"host:port. Make the host explicit — this machine's tailscale address to "+
+				"serve the tailnet, or 127.0.0.1 behind a reverse proxy. A bare \":3000\" "+
+				"binds every interface, including the one facing your LAN",
+			HTTPAddrEnv)
+	}
+
 	token, err := httpToken()
 	if err != nil {
 		return err
