@@ -1,7 +1,6 @@
 package mcp
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
@@ -43,8 +42,10 @@ func emptyElicitSchema() map[string]any {
 	}
 }
 
-// These three take a session rather than a request: the callers hold different
-// request types — a tool call and an initialize notification — over one session.
+// These read the session rather than the request because that is where the SDK
+// keeps the identity a client declared. Over stateless HTTP there is no session
+// to persist it, so the SDK rebuilds an ephemeral one per call out of the
+// request's _meta — which a 2026-07-28 client sends and an older one does not.
 
 // clientCanConfirm reports whether the client declared a channel the server can
 // use to reach the user. Without it, an input request cannot be fulfilled.
@@ -67,19 +68,6 @@ func initParams(ss *sdk.ServerSession) *sdk.InitializeParams {
 		return nil
 	}
 	return ss.InitializeParams()
-}
-
-// logClientIdentity records which confirmation mechanism the session got. It is
-// decided at connect time and invisible everywhere else, so without this line a
-// refusal further on looks arbitrary.
-func logClientIdentity(_ context.Context, req *sdk.InitializedRequest) {
-	confirmation := "the client's own approval prompt"
-	if clientCanConfirm(req.Session) {
-		confirmation = "server-side, per command"
-	}
-
-	log.Printf("client connected: name=%q; confirmations for actions: %s",
-		clientName(req.Session), confirmation)
 }
 
 // fingerprint identifies one operation across the confirmation round trip. The

@@ -32,14 +32,8 @@ const (
 const HTTPPath = "/mcp"
 
 const (
-	// Applies to the headers only. A response can be an SSE stream the client
-	// holds open, so there is deliberately no write deadline — one would cut
-	// every long-lived stream at the same age.
 	readHeaderTimeout = 10 * time.Second
-
-	// Long enough for an in-flight tool call to finish, short enough that a
-	// systemd restart does not hang on a client that stopped listening.
-	shutdownGrace = 10 * time.Second
+	shutdownGrace     = 10 * time.Second
 )
 
 // HTTPAddr reports the configured listen address.
@@ -58,9 +52,13 @@ func ServeHTTP(ctx context.Context, server *sdk.Server, addr string) error {
 			HTTPAddrEnv)
 	}
 
-	token, err := httpToken()
-	if err != nil {
-		return err
+	token := strings.TrimSpace(os.Getenv(HTTPTokenEnv))
+	if token == "" {
+		return fmt.Errorf(
+			"refusing to serve over HTTP without authentication: set %s to a random "+
+				"secret (`openssl rand -hex 32`) and send it as "+
+				"`Authorization: Bearer <token>` from every client",
+			HTTPTokenEnv)
 	}
 
 	handler := sdk.NewStreamableHTTPHandler(
@@ -86,7 +84,6 @@ func ServeHTTP(ctx context.Context, server *sdk.Server, addr string) error {
 	}
 
 	log.Printf("MCP server running on transport streamable http at http://%s%s ", listener.Addr(), HTTPPath)
-	warnIfWideOpen(listener.Addr())
 
 	// Shutdown runs in its own goroutine because ListenAndServe owns this one
 	// until it returns, and it only returns once Shutdown has been called.
@@ -108,61 +105,25 @@ func ServeHTTP(ctx context.Context, server *sdk.Server, addr string) error {
 	return nil
 }
 
-// httpToken resolves the credential the port cannot open without.
-func httpToken() (string, error) {
-	token := strings.TrimSpace(os.Getenv(HTTPTokenEnv))
-
-	if token == "" {
-		return "", fmt.Errorf(
-			"refusing to serve over HTTP without authentication: set %s to a random "+
-				"secret (`openssl rand -hex 32`) and send it as "+
-				"`Authorization: Bearer <token>` from every client",
-			HTTPTokenEnv)
-	}
-
-	return token, nil
-}
-
 // requireBearer authenticates every request. Nothing reaches the MCP handler
 // without the token — not tools/list, not initialize, not a ping.
 func requireBearer(token string, next http.Handler) http.Handler {
 	expected := []byte(token)
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !authorized(r.Header.Get("Authorization"), expected) {
+		scheme, presented, found := strings.Cut(
+			strings.TrimSpace(r.Header.Get("Authorization")), " ")
+
+		ok := found && strings.EqualFold(scheme, "Bearer") &&
+			subtle.ConstantTimeCompare([]byte(strings.TrimSpace(presented)), expected) == 1
+
+		if !ok {
 			w.Header().Set("WWW-Authenticate", `Bearer realm="homelab-mcp"`)
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			log.Printf("http: rejected an unauthenticated request from %s", r.RemoteAddr)
 			return
 		}
+
 		next.ServeHTTP(w, r)
 	})
-}
-
-func authorized(header string, expected []byte) bool {
-	scheme, presented, found := strings.Cut(strings.TrimSpace(header), " ")
-	if !found || !strings.EqualFold(scheme, "Bearer") {
-		return false
-	}
-
-	return subtle.ConstantTimeCompare([]byte(strings.TrimSpace(presented)), expected) == 1
-}
-
-// warnIfWideOpen says out loud what an address means, at the only moment anyone
-// is reading. The token makes this survivable rather than a breach, but a bare
-// ":3000" is usually an operator who read it as "localhost" and has just put
-// the endpoint on their LAN as well as their tailnet.
-func warnIfWideOpen(addr net.Addr) {
-	host, _, err := net.SplitHostPort(addr.String())
-	if err != nil {
-		return
-	}
-	if ip := net.ParseIP(host); ip == nil || !ip.IsUnspecified() {
-		return
-	}
-
-	log.Printf("note: listening on every interface, not just one. Only the token "+
-		"stands between the tools and anything that can route here — bind a single "+
-		"address in %s (e.g. 127.0.0.1:3000, or this host's tailscale address) unless "+
-		"that is what you meant", HTTPAddrEnv)
 }
