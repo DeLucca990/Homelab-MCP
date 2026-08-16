@@ -9,18 +9,27 @@ running out of disk?"* — or *"why hasn't Dune downloaded?"* — instead of SSH
 
 ## Tools
 
-**27 tools in four families, and never all at once.** A default install registers 7; the
-rest appear only when the environment authorises them. Full specifications, one page per
-family:
+**28 tools — one overview and four families — and never all at once.** A default install
+registers 8; the rest appear only when the environment authorises them. Full specifications,
+one page per family:
 
 | Family | Tools | Reference |
 | --- | --- | --- |
+| **Overview** | one call that checks every family below and reports only what is wrong | [tools/README.md](tools/README.md#homelab_overview) |
 | **System** | host info, CPU, memory, disk, systemd units | [tools/SYSTEM.md](tools/SYSTEM.md) |
 | **Docker** | container status, logs, and — opt-in — exec and restart | [tools/DOCKER.md](tools/DOCKER.md) |
 | **Radarr** | library, queue, lookup, health, and four writes | [tools/RADARR.md](tools/RADARR.md) |
 | **Sonarr** | library, missing episodes, queue, lookup, health, and five writes | [tools/SONARR.md](tools/SONARR.md) |
 
 What they are for, in one line each: [tools/README.md](tools/README.md).
+
+It also exposes two surfaces that are not tools: **prompts**, which state the order to
+diagnose something in — *[triage](tools/PROMPTS.md#triage)* and
+*[why-no-download](tools/PROMPTS.md#why-no-download)* — and **resources**, which hold the
+reference data the tools accept: the [quality profiles and root
+folders](tools/RESOURCES.md) each `*arr` actually has, and
+[what this install registered](tools/RESOURCES.md#homelabserverconfiguration) along with the
+variable that would enable whatever it did not.
 
 The point of the whole thing is the details a plain `df -h` / `docker ps` / a glance at
 Radarr will not tell you:
@@ -335,13 +344,14 @@ process, so nothing has to survive a hop.
 ## Documentation
 
 ```
-tools/     what each tool takes and answers — the specification
+tools/     what each tool, prompt and resource takes and answers — the specification
 docs/      how it is built and why — the design
 ```
 
 | | |
 | --- | --- |
-| [tools/README.md](tools/README.md) | the tool index and the conventions every tool shares |
+| [tools/README.md](tools/README.md) | the tool index, the overview tool, and the conventions every tool shares |
+| [tools/PROMPTS.md](tools/PROMPTS.md) · [tools/RESOURCES.md](tools/RESOURCES.md) | the two surfaces that are not tools |
 | [tools/SYSTEM.md](tools/SYSTEM.md) · [tools/DOCKER.md](tools/DOCKER.md) · [tools/RADARR.md](tools/RADARR.md) · [tools/SONARR.md](tools/SONARR.md) | per-family reference |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | layering, tool registration, the confirmation round trip, the fingerprint |
 | [docs/modules/](docs/modules/) | one page per integration: [system](docs/modules/system.md), [docker](docs/modules/docker.md), [radarr](docs/modules/radarr.md), [sonarr](docs/modules/sonarr.md) |
@@ -352,7 +362,8 @@ docs/      how it is built and why — the design
 cmd/server/          entrypoint: .env loading, signal handling, serving
 internal/dotenv/     reads a .env into the environment before anything is registered
 internal/mcp/        MCP layer — tool registration, schemas, text rendering, confirmation,
-                     and the HTTP transport with its bearer auth
+                     prompts, resources, and the HTTP transport with its bearer auth
+internal/overview/   every cheap check at once, composed from the collectors below
 internal/system/     collection layer — gopsutil calls, no MCP types
 internal/services/   systemd units, over systemctl
 internal/containers/ docker, over the Engine API on the unix socket
@@ -373,6 +384,11 @@ missing versus unreleased, id resolution and every refusal the add path makes �
 for Sonarr, plus what is only true there: episode counting, season packs sharing one
 download, and the three search scopes hashing apart so an approval for one season cannot run
 against a whole series.
+
+It also covers the surfaces added around those: the overview, including that a service being
+down does not withhold the checks that worked, and — over the SDK's in-memory transport, so
+what is asserted is what a client sees — that the prompts and resources appear only where the
+tools they name were registered.
 
 ## Built with
 

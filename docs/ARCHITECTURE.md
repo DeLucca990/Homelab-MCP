@@ -24,7 +24,9 @@ sensitive; if you upgrade the SDK, re-read that section against the new code.
 ```
 cmd/server/main.go        .env loading, stdio transport, signal handling
 internal/dotenv/          .env → process environment, before registration
-internal/mcp/             protocol layer — registration, handlers, rendering, confirmation
+internal/mcp/             protocol layer — registration, handlers, rendering, confirmation,
+                          prompts and resources
+internal/overview/        every cheap check at once          (composes the collectors below)
 internal/system/          host, CPU, memory, disk            (gopsutil)
 internal/services/        systemd units                      (systemctl)
 internal/containers/      docker                             (Engine API over the unix socket)
@@ -134,10 +136,17 @@ configuration — an MCP client execs it directly, with no shell to source
 anything, and a client's `env` block does not survive an ssh hop. Whatever the
 operator supplied deliberately still wins.
 
-The result is 7 tools on a default install and up to 27 fully configured:
+The same predicates decide the prompts and the resources, for a stronger reason:
+a tool that does not exist cannot be called, but a **procedure** naming a tool
+that does not exist reads as authoritative and sends the model at nothing. So
+`why-no-download` is not registered without an `*arr`, and the tool names inside
+both prompts expand to the ones this install actually has.
+
+The result is 8 tools on a default install and up to 28 fully configured:
 
 | Family | Always | Needs config | Confirms |
 |---|---|---|---|
+| Overview (1) | all | – | – |
 | System (5) | all | – | – |
 | Docker (4) | status, logs | exec, restart — **allowlist** | exec, restart |
 | Radarr (8) | – | all — **URL + API key** | add, search, remove, queue_remove |
@@ -145,6 +154,51 @@ The result is 7 tools on a default install and up to 27 fully configured:
 
 The two `*arr` families gate independently: one configured and the other not is a
 normal install, and each has its own key and its own read-only switch.
+
+### Prompts, resources, and what belongs in each
+
+Three surfaces, and the choice between them is not stylistic. A **tool** answers
+a question about the machine right now. A **resource** holds reference data that
+is stable and that a client can attach once. A **prompt** holds a procedure —
+knowledge about the order to do things in, which no single tool description can
+carry because a model meets those one at a time.
+
+The test that settled every case here: *would this be a round trip whose
+successful outcome is an error?* Discovering a quality profile today means
+guessing a name and reading the refusal that lists them. That is reference data
+wearing a tool's clothes, so it became
+[a resource](../tools/RESOURCES.md). And *would a model reading only one tool
+description ever learn this?* The reason a Sonarr search finds nothing is that
+the season is unmonitored — a fact that lives in a different tool entirely, so it
+became [a prompt](../tools/PROMPTS.md).
+
+Resources are `text/markdown` rather than JSON. A resource has one channel, not
+the two a tool result has, and its content is read rather than computed on — so
+the tables are written for the reader, with byte counts rendered human-readable
+in place, exactly as a tool's text channel does it.
+
+### The overview composes; it does not duplicate
+
+`homelab_overview` runs every cheap check at once and reports only what needs
+attention. It lives in `internal/overview/`, which imports the other collectors
+and imports nothing from `internal/mcp` — the same rule as every other collector,
+applied to a collector whose sources are collectors.
+
+**Every warning it reports is the one that area's own tool produced, unchanged.**
+That is what stops the overview and the tool behind it from ever disagreeing, and
+it is why the overview cannot be the place a new judgement is invented. It makes
+exactly two of its own, both stated where they are computed and both conditions
+no existing collector calls a warning: a writable filesystem over 90%, and memory
+over 90% or swap over 50%.
+
+Two distinctions it holds that a simple aggregate would lose:
+
+- **Absent is not failed.** A host with no Docker daemon and a host whose Docker
+  daemon is refusing connections are different answers with different fixes.
+- **Fullest is not filling up.** The disk section is about the fullest filesystem
+  something can still *write* to. A read-only mount at 100% is an ISO or a
+  squashfs image, and reporting it is how a monitor teaches its reader to ignore
+  it.
 
 ---
 

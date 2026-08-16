@@ -12,6 +12,26 @@ import (
 )
 
 func registerTools(s *sdk.Server) {
+	// overview tool
+	sdk.AddTool(s, &sdk.Tool{
+		Name: "homelab_overview",
+		Annotations: &sdk.ToolAnnotations{
+			Title:        "Homelab Overview",
+			ReadOnlyHint: true,
+		},
+		Description: "Answers 'is anything wrong with this server' in ONE call. Runs every " +
+			"cheap check at once — disk, memory, systemd units, Docker containers, and the " +
+			"Radarr and Sonarr queues and health where they are configured — and reports only " +
+			"what needs attention, naming the tool to call for the detail behind each line. " +
+			"Prefer this over calling the individual read tools one by one for any general " +
+			"question about the server's state: it is one round trip instead of six, every " +
+			"warning is the one that area's own tool would have given, and on a healthy " +
+			"machine the entire answer is a single line. A check that cannot run says so " +
+			"without withholding the others. It deliberately leaves out per-core CPU, which " +
+			"costs half a second and where a pinned core is not a fault — use system_cpu_cores " +
+			"when the question is actually about load.",
+	}, handleOverview)
+
 	// system host tool
 	sdk.AddTool(s, &sdk.Tool{
 		Name: "system_host_info",

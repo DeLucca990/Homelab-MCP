@@ -40,7 +40,7 @@ type DiskStats struct {
 
 // Filesystem types that never represent real storage worth monitoring.
 var ignoredFstypes = map[string]bool{
-	"squashfs": true, "tmpfs": true, "devtmpfs": true, "overlay": true,
+	"squashfs": true, "tmpfs": true, "devtmpfs": true, "devfs": true, "overlay": true,
 	"ramfs": true, "autofs": true, "iso9660": true, "fusectl": true,
 	"configfs": true, "debugfs": true, "tracefs": true, "securityfs": true,
 	"cgroup": true, "cgroup2": true, "bpf": true, "pstore": true,

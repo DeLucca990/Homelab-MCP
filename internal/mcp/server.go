@@ -12,6 +12,8 @@ func New() *sdk.Server {
 	}, nil)
 
 	registerTools(server)
+	registerPrompts(server)
+	registerResources(server)
 
 	return server
 }
