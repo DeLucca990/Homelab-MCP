@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/DeLucca990/homelab-mcp/internal/containers"
+	"github.com/DeLucca990/homelab-mcp/internal/jellyfin"
 	"github.com/DeLucca990/homelab-mcp/internal/radarr"
 	"github.com/DeLucca990/homelab-mcp/internal/services"
 	"github.com/DeLucca990/homelab-mcp/internal/sonarr"
@@ -30,6 +31,10 @@ import (
 // a pinned core is not a fault — a media server transcoding looks exactly like
 // one in trouble. system_cpu_cores is one call away when the question is
 // actually about load.
+//
+// Where Jellyfin is configured, the jellyfin section is the closest thing to an
+// answer for that: it does not measure the CPU, but it says how many streams
+// are being re-encoded on it, which is what the load usually turns out to be.
 
 const (
 	StatusAttention = "attention"
@@ -79,6 +84,9 @@ func Get(ctx context.Context) Report {
 	}
 	if sonarr.Configured() {
 		checks = append(checks, checkSonarr)
+	}
+	if jellyfin.Configured() {
+		checks = append(checks, checkJellyfin)
 	}
 
 	sections := make([]Section, len(checks))
@@ -271,6 +279,90 @@ func checkSonarr(ctx context.Context) Section {
 	}
 
 	return s.settled()
+}
+
+func checkJellyfin(ctx context.Context) Section {
+	s := Section{Name: "jellyfin"}
+
+	health, healthErr := jellyfin.GetHealth(ctx)
+	sessions, sessionsErr := jellyfin.GetSessions(ctx, jellyfin.SessionOptions{})
+	if healthErr != nil && sessionsErr != nil {
+		s.Tool = "jellyfin_system_health"
+		return s.failed(healthErr)
+	}
+
+	s.Headline = jellyfinHeadline(health, sessions, healthErr, sessionsErr)
+
+	var fromSessions, fromHealth []string
+
+	if sessionsErr == nil {
+		fromSessions = sessions.Warnings
+	} else {
+		fromSessions = []string{"could not read Jellyfin's sessions: " + sessionsErr.Error()}
+	}
+
+	if healthErr == nil {
+		fromHealth = slices.DeleteFunc(slices.Clone(health.Warnings), func(w string) bool {
+			return slices.Contains(health.StandingWarnings, w)
+		})
+	} else {
+		fromHealth = []string{"could not read Jellyfin's health: " + healthErr.Error()}
+	}
+
+	s.Tool = "jellyfin_active_sessions"
+	if len(fromSessions) == 0 && len(fromHealth) > 0 {
+		s.Tool = "jellyfin_system_health"
+	}
+
+	s.Warnings = append(fromSessions, fromHealth...)
+
+	return s.settled()
+}
+
+// jellyfinHeadline answers the same three things the *arr line does — is it up,
+// is it working, is anything stuck — for a server whose work is streams rather
+// than downloads.
+func jellyfinHeadline(
+	h jellyfin.Health,
+	s jellyfin.Sessions,
+	healthErr, sessionsErr error,
+) string {
+	head := "v" + h.Version
+	switch {
+	case healthErr != nil:
+		head = "health unreadable"
+	case h.Version == "":
+		head = "version unknown"
+	}
+
+	switch {
+	case sessionsErr != nil:
+		head += ", sessions unreadable"
+
+	case s.PlayingCount == 0:
+		head += ", nothing playing"
+
+	default:
+		head += fmt.Sprintf(", %d playing", s.PlayingCount)
+		if transcodes := s.SoftwareCount + s.HardwareCount; transcodes > 0 {
+			head += fmt.Sprintf(" (%d transcoding", transcodes)
+			if s.SoftwareCount > 0 {
+				head += fmt.Sprintf(", %d on the CPU", s.SoftwareCount)
+			}
+			head += ")"
+		}
+	}
+
+	if healthErr == nil {
+		if h.FailedTaskCount > 0 {
+			head += fmt.Sprintf(", %d failing task(s)", h.FailedTaskCount)
+		}
+		if h.PendingRestart {
+			head += ", restart pending"
+		}
+	}
+
+	return head
 }
 
 // arrHeadline is one line for either service, since the question is the same

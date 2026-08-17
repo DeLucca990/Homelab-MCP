@@ -1,7 +1,7 @@
 # Homelab MCP
 
 An [MCP](https://modelcontextprotocol.io) server that exposes a Linux home server
-to an AI assistant: system health, Docker containers, Radarr and Sonarr.
+to an AI assistant: system health, Docker containers, Radarr, Sonarr and Jellyfin.
 
 It is a single static Go binary that speaks MCP over **Streamable HTTP**. Run it on the machine
 you want to watch, point any MCP client on your tailnet at it, and you can ask *"is my server
@@ -9,7 +9,7 @@ running out of disk?"* — or *"why hasn't Dune downloaded?"* — instead of SSH
 
 ## Tools
 
-**28 tools — one overview and four families — and never all at once.** A default install
+**30 tools — one overview and five families — and never all at once.** A default install
 registers 8; the rest appear only when the environment authorises them. Full specifications,
 one page per family:
 
@@ -20,6 +20,7 @@ one page per family:
 | **Docker** | container status, logs, and — opt-in — exec and restart | [tools/DOCKER.md](tools/DOCKER.md) |
 | **Radarr** | library, queue, lookup, health, and four writes | [tools/RADARR.md](tools/RADARR.md) |
 | **Sonarr** | library, missing episodes, queue, lookup, health, and five writes | [tools/SONARR.md](tools/SONARR.md) |
+| **Jellyfin** | who is watching what and what it costs, and the server's own health | [tools/JELLYFIN.md](tools/JELLYFIN.md) |
 
 What they are for, in one line each: [tools/README.md](tools/README.md).
 
@@ -52,6 +53,13 @@ Radarr will not tell you:
   that again.
 - **One download, fourteen queue rows.** A Sonarr season pack is a single file that appears
   once per episode it holds, so removing any one of those rows removes all of them.
+- **A pinned CPU that is not a fault.** A media server transcoding and one in trouble look
+  identical from a load average — and "transcoding" itself covers a container rewrite costing
+  nothing and a re-encode costing a whole core, per viewer.
+- **A stream playing to nobody.** A client that lost its network is still *playing* as far as
+  Jellyfin is concerned, and the transcode behind it is still running.
+- **A library scan that has been failing.** Radarr reports the film imported, the file is on
+  disk, and it is in no library anyone can see.
 
 ## Requirements
 
@@ -90,6 +98,7 @@ changing any of them.
 | `HOMELAB_MCP_RADARR_READONLY` | drops Radarr's four writes | [tools/RADARR.md](tools/RADARR.md#configuration) |
 | `SERVER_URL` + `SONARR_API_KEY` | the whole Sonarr family | [tools/SONARR.md](tools/SONARR.md#configuration) |
 | `HOMELAB_MCP_SONARR_READONLY` | drops Sonarr's five writes | [tools/SONARR.md](tools/SONARR.md#configuration) |
+| `SERVER_URL` + `JELLYFIN_API_KEY` | both Jellyfin tools | [tools/JELLYFIN.md](tools/JELLYFIN.md#configuration) |
 | `HOMELAB_MCP_TRUST_CLIENT_CONFIRMATION` | acting on clients that cannot show a server confirmation | [below](#approving-actions) |
 | `HOMELAB_MCP_HTTP_ADDR` + `HOMELAB_MCP_HTTP_TOKEN` | **required** — the address it listens on and the token it demands | [below](#over-http-instead) |
 
@@ -103,12 +112,13 @@ with a clone: a `.env` at the root of the repo, read on startup.
 SERVER_URL=http://localhost
 RADARR_API_KEY=your-radarr-key
 SONARR_API_KEY=your-sonarr-key
+JELLYFIN_API_KEY=your-jellyfin-key
 HOMELAB_MCP_ALLOW_CONTAINER_NAMES=jellyfin,sonarr,radarr
 ```
 
-One `SERVER_URL` serves both services because each fills in its own port — Radarr's 7878,
-Sonarr's 8989 — so keep it a bare host. Written with a port (`http://nas:7878`) it can only
-reach one of them.
+One `SERVER_URL` serves all three services because each fills in its own port — Radarr's 7878,
+Sonarr's 8989, Jellyfin's 8096 — so keep it a bare host. Written with a port
+(`http://nas:7878`) it can only reach one of them.
 
 `make build` and run — no wrapper, no shell. The rules:
 
@@ -153,6 +163,7 @@ systemd install:
 ```
 [homelab-mcp] radarr at http://localhost:7878: read and write
 [homelab-mcp] sonarr at http://localhost:8989: read and write
+[homelab-mcp] jellyfin at http://localhost:8096: read-only
 [homelab-mcp] MCP server running on transport streamable http at http://100.101.102.103:3000/mcp
 ```
 
@@ -362,9 +373,9 @@ docs/      how it is built and why — the design
 | --- | --- |
 | [tools/README.md](tools/README.md) | the tool index, the overview tool, and the conventions every tool shares |
 | [tools/PROMPTS.md](tools/PROMPTS.md) · [tools/RESOURCES.md](tools/RESOURCES.md) | the two surfaces that are not tools |
-| [tools/SYSTEM.md](tools/SYSTEM.md) · [tools/DOCKER.md](tools/DOCKER.md) · [tools/RADARR.md](tools/RADARR.md) · [tools/SONARR.md](tools/SONARR.md) | per-family reference |
+| [tools/SYSTEM.md](tools/SYSTEM.md) · [tools/DOCKER.md](tools/DOCKER.md) · [tools/RADARR.md](tools/RADARR.md) · [tools/SONARR.md](tools/SONARR.md) · [tools/JELLYFIN.md](tools/JELLYFIN.md) | per-family reference |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | layering, tool registration, the confirmation round trip, the fingerprint |
-| [docs/modules/](docs/modules/) | one page per integration: [system](docs/modules/system.md), [docker](docs/modules/docker.md), [radarr](docs/modules/radarr.md), [sonarr](docs/modules/sonarr.md) |
+| [docs/modules/](docs/modules/) | one page per integration: [system](docs/modules/system.md), [docker](docs/modules/docker.md), [radarr](docs/modules/radarr.md), [sonarr](docs/modules/sonarr.md), [jellyfin](docs/modules/jellyfin.md) |
 
 ## Project layout
 
@@ -379,6 +390,7 @@ internal/services/   systemd units, over systemctl
 internal/containers/ docker, over the Engine API on the unix socket
 internal/radarr/     radarr, over its v3 HTTP API
 internal/sonarr/     sonarr, over its v3 HTTP API
+internal/jellyfin/   jellyfin, over its HTTP API
 ```
 
 The split is deliberate: the collectors know nothing about MCP, so they stay testable and
@@ -394,6 +406,13 @@ missing versus unreleased, id resolution and every refusal the add path makes �
 for Sonarr, plus what is only true there: episode counting, season packs sharing one
 download, and the three search scopes hashing apart so an approval for one season cannot run
 against a whole series.
+
+The Jellyfin client is covered the same way, against a mock Jellyfin: the authorization header
+it sends — which is the one thing it cannot borrow from the `*arr` clients, and a regression
+there would look exactly like an expired key — the tick and timestamp conversions, the
+four-way split of what a stream actually costs, a stale session told apart from a paused one,
+and a health call that degrades into warnings rather than failing when the key turns out not
+to be an administrator key.
 
 It also covers the surfaces added around those: the overview, including that a service being
 down does not withhold the checks that worked, and — over the SDK's in-memory transport, so

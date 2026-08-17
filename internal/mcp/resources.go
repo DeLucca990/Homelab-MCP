@@ -8,6 +8,7 @@ import (
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/DeLucca990/homelab-mcp/internal/containers"
+	"github.com/DeLucca990/homelab-mcp/internal/jellyfin"
 	"github.com/DeLucca990/homelab-mcp/internal/radarr"
 	"github.com/DeLucca990/homelab-mcp/internal/sonarr"
 	"github.com/DeLucca990/homelab-mcp/internal/system"
@@ -147,6 +148,8 @@ func handleConfigurationResource(ctx context.Context, req *sdk.ReadResourceReque
 		DefaultQuota: sonarr.DefaultQualityProfile,
 	})
 
+	writeJellyfinConfiguration(&b)
+
 	b.WriteString("## Approving an action\n\n")
 	if trustClientConfirmation() {
 		b.WriteString("`" + trustClientEnv + "` is set: this server accepts the approval prompt " +
@@ -203,6 +206,31 @@ func writeArrConfiguration(b *strings.Builder, c arrConfig) {
 	fmt.Fprintf(b, "Writes registered, each asking before it acts: %s. Quality defaults to "+
 		"`%s`; the profiles and folders this instance actually has are at `%s` and `%s`.\n\n",
 		c.WriteTools, c.DefaultQuota, c.ProfilesURI, c.FoldersURI)
+}
+
+// Jellyfin does not use the arrConfig shape: it has no quality profiles, no
+// root folders and — for now — no writes, so the paragraph it needs is a
+// different one. What it does have that the *arrs do not is a second way to be
+// half-configured, because most of what the health tool reads is admin-only.
+func writeJellyfinConfiguration(b *strings.Builder) {
+	b.WriteString("## Jellyfin\n\n")
+
+	if !jellyfin.Configured() {
+		fmt.Fprintf(b, "**Not registered.** Set `%s` and `%s` on the machine running this "+
+			"server — %s expects a bare host, because each service fills in its own port "+
+			"(Jellyfin's is 8096).\n\n",
+			jellyfin.BaseURLEnv, jellyfin.APIKeyEnv, jellyfin.BaseURLEnv)
+		return
+	}
+
+	fmt.Fprintf(b, "Registered against %s, read-only: `jellyfin_active_sessions` and "+
+		"`jellyfin_system_health`. There is no read-only switch for this family because it "+
+		"has no writes to drop.\n\n", arrBaseURL(jellyfin.BaseURL))
+
+	fmt.Fprintf(b, "Most of what `jellyfin_system_health` reads is administrator-only. A key "+
+		"issued from Jellyfin's Dashboard → API Keys has those rights; one taken from a user "+
+		"session does not, and the tool then answers with the sections it could read and a "+
+		"warning naming each one it could not. `%s` is that key.\n\n", jellyfin.APIKeyEnv)
 }
 
 // arrBaseURL reports the address a service is configured against, or why it

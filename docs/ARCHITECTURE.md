@@ -12,6 +12,7 @@ next to it:
 | Docker | [modules/docker.md](modules/docker.md) | [tools/DOCKER.md](../tools/DOCKER.md) |
 | Radarr | [modules/radarr.md](modules/radarr.md) | [tools/RADARR.md](../tools/RADARR.md) |
 | Sonarr | [modules/sonarr.md](modules/sonarr.md) | [tools/SONARR.md](../tools/SONARR.md) |
+| Jellyfin | [modules/jellyfin.md](modules/jellyfin.md) | [tools/JELLYFIN.md](../tools/JELLYFIN.md) |
 
 Written against `github.com/modelcontextprotocol/go-sdk` **v1.7.0**. The
 multi-round-trip behaviour described in §3 is SDK- and protocol-version
@@ -32,6 +33,7 @@ internal/services/        systemd units                      (systemctl)
 internal/containers/      docker                             (Engine API over the unix socket)
 internal/radarr/          radarr                             (v3 HTTP API)
 internal/sonarr/          sonarr                             (v3 HTTP API)
+internal/jellyfin/        jellyfin                           (HTTP API)
 ```
 
 One rule holds the layering together: **`internal/mcp` never touches the OS, and
@@ -125,7 +127,14 @@ if allowed := containers.ActionAllowlist(); len(allowed) > 0 { ... }  // docker 
 if radarr.Configured() { ... }                                       // the radarr family
 if radarr.ReadOnly() { return }                                      // its four writes
 if sonarr.Configured() { ... }                                       // and the same, per service
+if jellyfin.Configured() { ... }                                     // both jellyfin tools
 ```
+
+Jellyfin has no `ReadOnly()` predicate, and its absence is the rule rather than
+an omission: both of its tools are reads, so the switch would gate nothing — and
+a setting that turns nothing off is worse than an absent one, because an
+operator who sets it believes something happened. It arrives with the first
+write.
 
 **Which means the environment must be complete before `New()` is called.**
 `cmd/server/main.go` loads the `.env` first for exactly that reason: a variable
@@ -142,7 +151,7 @@ that does not exist reads as authoritative and sends the model at nothing. So
 `why-no-download` is not registered without an `*arr`, and the tool names inside
 both prompts expand to the ones this install actually has.
 
-The result is 8 tools on a default install and up to 28 fully configured:
+The result is 8 tools on a default install and up to 30 fully configured:
 
 | Family | Always | Needs config | Confirms |
 |---|---|---|---|
@@ -151,9 +160,15 @@ The result is 8 tools on a default install and up to 28 fully configured:
 | Docker (4) | status, logs | exec, restart — **allowlist** | exec, restart |
 | Radarr (8) | – | all — **URL + API key** | add, search, remove, queue_remove |
 | Sonarr (10) | – | all — **URL + API key** | add, season_monitor, search, remove, queue_remove |
+| Jellyfin (2) | – | all — **URL + API key** | – |
 
-The two `*arr` families gate independently: one configured and the other not is a
-normal install, and each has its own key and its own read-only switch.
+The three service families gate independently: one configured and the others not
+is a normal install, and each has its own key. Jellyfin has a second axis the
+others do not — most of what its health tool reads is administrator-only, so a
+key that authenticates can still be refused per request. That is handled inside
+the module rather than at registration: a tool that exists and answers with the
+sections it could read beats one that is absent because a subset of its requests
+would fail. See [modules/jellyfin.md](modules/jellyfin.md#admin-rights-are-a-second-axis-of-configured).
 
 ### Prompts, resources, and what belongs in each
 
@@ -190,6 +205,18 @@ it is why the overview cannot be the place a new judgement is invented. It makes
 exactly two of its own, both stated where they are computed and both conditions
 no existing collector calls a warning: a writable filesystem over 90%, and memory
 over 90% or swap over 50%.
+
+**It drops warnings in exactly one place, and that is a different act from
+altering one.** Jellyfin's health collector marks its encoding findings as
+`StandingWarnings`: they describe how the server is *configured* rather than
+what is wrong with it *now*. A machine with no GPU has no hardware acceleration
+every second of its life, and an overview that opens with that on every glance
+is one nobody reads twice — so the jellyfin section leaves them out and stays
+`ok`. The two surfaces do not disagree, because they are not answering the same
+question: `jellyfin_system_health` is asked "how is this set up", and it still
+reports every one of them. And the condition stops being standing the moment
+something is paying for it, which arrives in the overview anyway — as a
+software-transcode warning out of the session list.
 
 Two distinctions it holds that a simple aggregate would lose:
 
@@ -489,6 +516,8 @@ silent. Silent truncation reads as a complete answer.
 | log output | 16 KiB, truncation reported | |
 | restart settle | 15s, 3s stable window | Docker reports "running" the instant the process spawns |
 | Radarr/Sonarr API timeout | 10s | answered from the service's local database |
+| Jellyfin API timeout | 10s | answered from memory or its own database |
+| Jellyfin session window | 900s | anything playing checks in constantly, so this excludes only idle devices |
 | Radarr/Sonarr lookup timeout | 30s | proxied to a metadata service over the internet |
 | Radarr/Sonarr queue page | 200 items | the API pages at 10 |
 | Radarr/Sonarr library listing | 25 default, 200 max | a full dump buries the answer |
@@ -503,7 +532,10 @@ silent. Silent truncation reads as a complete answer.
 | Model says it has no action tools | Allowlist unset in the environment the server actually got — for an SSH-launched server, the `env` block in the client config reaches only the local `ssh` process, not the remote one |
 | Model says it has no Radarr tools | One of `SERVER_URL` / `RADARR_API_KEY` is unset, or the URL would not parse — the connect-time log says which |
 | Model says it has no Sonarr tools | Same, for `SERVER_URL` / `SONARR_API_KEY` |
-| Radarr answers but Sonarr does not (or the reverse) | `SERVER_URL` names a port, so it can only reach one of them — it has to stay a bare host for both to resolve their own |
+| Model says it has no Jellyfin tools | Same, for `SERVER_URL` / `JELLYFIN_API_KEY` |
+| One service answers and another does not | `SERVER_URL` names a port, so it can only reach one of them — it has to stay a bare host for each to resolve its own (7878, 8989, 8096) |
+| Jellyfin health is missing its storage, tasks and plugins | The key authenticates but is not an administrator key; the warnings say so per section (§ [jellyfin](modules/jellyfin.md#admin-rights-are-a-second-axis-of-configured)) |
+| Jellyfin rejects a key that is definitely correct | It was sent as `X-Api-Key`, the way the `*arr` clients do it. Jellyfin reads neither that nor `X-Emby-Token` — only its own `Authorization: MediaBrowser …` scheme |
 | `Failed to call tool` on an action | Client declares no elicitation and `HOMELAB_MCP_TRUST_CLIENT_CONFIRMATION` is unset — see the connect-time log line |
 | Approved but refused | Fingerprint mismatch: the retry carried different arguments — or, for Radarr, the state it resolved against moved (§4.3) |
 | A warning is missing from one client | It was built in the renderer instead of the collector (§1) |
@@ -522,7 +554,8 @@ silent. Silent truncation reads as a complete answer.
 | Change the confirmation flow itself | `internal/mcp/confirm.go` — one place, on purpose |
 | Change table formatting | `internal/mcp/render.go` |
 | Change what may be acted on | `internal/containers/allowlist.go` |
-| Change how Radarr or Sonarr is addressed or authenticated | `internal/radarr/client.go`, `internal/sonarr/client.go` |
+| Change how Radarr, Sonarr or Jellyfin is addressed or authenticated | `internal/radarr/client.go`, `internal/sonarr/client.go`, `internal/jellyfin/client.go` |
+| Change what a Jellyfin stream is judged to cost | `classifyWork` in `internal/jellyfin/sessions.go` |
 | Change what is resolved before an add is approved | `radarr.Plan` / `sonarr.Plan` in the module's `add.go` |
 | Change how much a Sonarr search covers | `sonarr.ResolveSearch` in `internal/sonarr/search.go` |
 | Change where configuration is read from | `internal/dotenv/` |
