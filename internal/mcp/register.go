@@ -7,6 +7,7 @@ import (
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/DeLucca990/homelab-mcp/internal/containers"
+	"github.com/DeLucca990/homelab-mcp/internal/jellyfin"
 	"github.com/DeLucca990/homelab-mcp/internal/radarr"
 	"github.com/DeLucca990/homelab-mcp/internal/sonarr"
 )
@@ -20,16 +21,18 @@ func registerTools(s *sdk.Server) {
 			ReadOnlyHint: true,
 		},
 		Description: "Answers 'is anything wrong with this server' in ONE call. Runs every " +
-			"cheap check at once — disk, memory, systemd units, Docker containers, and the " +
-			"Radarr and Sonarr queues and health where they are configured — and reports only " +
-			"what needs attention, naming the tool to call for the detail behind each line. " +
-			"Prefer this over calling the individual read tools one by one for any general " +
-			"question about the server's state: it is one round trip instead of six, every " +
-			"warning is the one that area's own tool would have given, and on a healthy " +
-			"machine the entire answer is a single line. A check that cannot run says so " +
-			"without withholding the others. It deliberately leaves out per-core CPU, which " +
-			"costs half a second and where a pinned core is not a fault — use system_cpu_cores " +
-			"when the question is actually about load.",
+			"cheap check at once — disk, memory, systemd units, Docker containers, the " +
+			"Radarr and Sonarr queues and health, and what Jellyfin is streaming, where each " +
+			"is configured — and reports only what needs attention, naming the tool to call " +
+			"for the detail behind each line. Prefer this over calling the individual read " +
+			"tools one by one for any general question about the server's state: it is one " +
+			"round trip instead of seven, every warning is the one that area's own tool would " +
+			"have given, and on a healthy machine the entire answer is a single line. A check " +
+			"that cannot run says so without withholding the others. It deliberately leaves " +
+			"out per-core CPU, which costs half a second and where a pinned core is not a " +
+			"fault — but where Jellyfin is configured the jellyfin line says how many streams " +
+			"are being re-encoded on the CPU, which is what that load usually is. Use " +
+			"system_cpu_cores when the question is about the cores themselves.",
 	}, handleOverview)
 
 	// system host tool
@@ -161,6 +164,7 @@ func registerTools(s *sdk.Server) {
 
 	registerRadarrTools(s)
 	registerSonarrTools(s)
+	registerJellyfinTools(s)
 }
 
 // RADARR tools
@@ -502,4 +506,54 @@ func registerSonarrTools(s *sdk.Server) {
 			"removing any one of them removes the file behind all of them, and the confirmation " +
 			"says how many episodes that is. Asks the user before removing anything.",
 	}, handleSonarrQueueRemove)
+}
+
+// JELLYFIN tools
+func registerJellyfinTools(s *sdk.Server) {
+	if !jellyfin.Configured() {
+		return
+	}
+
+	base, err := jellyfin.BaseURL()
+	if err != nil {
+		log.Printf("jellyfin tools not registered: %v", err)
+		return
+	}
+
+	log.Printf("jellyfin at %s: read-only", base)
+
+	sdk.AddTool(s, &sdk.Tool{
+		Name: "jellyfin_active_sessions",
+		Annotations: &sdk.ToolAnnotations{
+			Title:        "Jellyfin Active Sessions",
+			ReadOnlyHint: true,
+		},
+		Description: "Returns who is watching what on Jellyfin right now and what each stream " +
+			"costs the server, most expensive first. This is the tool that answers 'why is the " +
+			"CPU at 100%' on a media server, which homelab_overview deliberately will not guess " +
+			"at: a pinned core is either a transcode or a fault, and only this can tell them " +
+			"apart. It goes finer than Jellyfin's own label — 'Transcode' covers both a remux " +
+			"that costs nothing and a full re-encode that saturates a core, so the 'work' field " +
+			"separates direct, remux, hardware transcode and software transcode, and reports the " +
+			"reasons Jellyfin would not send the file untouched. It also flags a session that " +
+			"claims to be playing but stopped reporting progress: nobody is watching it and the " +
+			"transcode is still running. Idle sessions are hidden unless include_idle is set.",
+	}, handleJellyfinSessions)
+
+	sdk.AddTool(s, &sdk.Tool{
+		Name: "jellyfin_system_health",
+		Annotations: &sdk.ToolAnnotations{
+			Title:        "Jellyfin System Health",
+			ReadOnlyHint: true,
+		},
+		Description: "Returns Jellyfin's version, its encoding configuration, free space on every " +
+			"folder it writes to, its scheduled tasks and any plugin that is not running. Three " +
+			"of those are invisible from outside the application: a server with no hardware " +
+			"acceleration configured looks perfectly healthy until the first stream that needs " +
+			"it; the transcode temp directory is usually not the disk the media is on, and a " +
+			"stream that fills it stops playing rather than reporting an error; and a library " +
+			"scan that has been failing means files the *arrs imported are on disk and absent " +
+			"from Jellyfin. Most of what it reads is administrator-only — a key without those " +
+			"rights loses those sections and says so rather than failing the call.",
+	}, handleJellyfinHealth)
 }
