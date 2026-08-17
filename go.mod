@@ -3,6 +3,7 @@ module github.com/DeLucca990/homelab-mcp
 go 1.26.4
 
 require (
+	github.com/joho/godotenv v1.5.1
 	github.com/modelcontextprotocol/go-sdk v1.7.0
 	github.com/shirou/gopsutil/v4 v4.26.7
 )

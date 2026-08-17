@@ -5,7 +5,6 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 
 	"github.com/DeLucca990/homelab-mcp/internal/dotenv"
@@ -16,9 +15,8 @@ func main() {
 	log.SetOutput(os.Stderr)
 	log.SetPrefix("[homelab-mcp] ")
 
-	loadEnvFile()
+	dotenv.LoadEnvVariables()
 
-	// Cancelled on Ctrl+C or SIGTERM (systemd).
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -29,32 +27,4 @@ func main() {
 	}
 
 	log.Println("server stopped")
-}
-
-func loadEnvFile() {
-	loaded, err := dotenv.Load()
-	if err != nil {
-		log.Printf("env file: %v — continuing without it", err)
-		return
-	}
-	if loaded.Path == "" {
-		return
-	}
-
-	log.Printf("env file %s: set %s", loaded.Path, names(loaded.Applied))
-	if len(loaded.Skipped) > 0 {
-		log.Printf("env file %s: %s already set in the environment, left alone",
-			loaded.Path, names(loaded.Skipped))
-	}
-	if dotenv.WorldReadable(loaded.Path) {
-		log.Printf("env file %s is readable by every user on this host; "+
-			"it holds an API key — chmod 600 it", loaded.Path)
-	}
-}
-
-func names(vars []string) string {
-	if len(vars) == 0 {
-		return "nothing"
-	}
-	return strings.Join(vars, ", ")
 }

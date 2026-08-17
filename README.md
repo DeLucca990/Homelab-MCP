@@ -91,7 +91,6 @@ changing any of them.
 | `SERVER_URL` + `SONARR_API_KEY` | the whole Sonarr family | [tools/SONARR.md](tools/SONARR.md#configuration) |
 | `HOMELAB_MCP_SONARR_READONLY` | drops Sonarr's five writes | [tools/SONARR.md](tools/SONARR.md#configuration) |
 | `HOMELAB_MCP_TRUST_CLIENT_CONFIRMATION` | acting on clients that cannot show a server confirmation | [below](#approving-actions) |
-| `HOMELAB_MCP_ENV_FILE` | an explicit path to the `.env` | [below](#a-env-file) |
 | `HOMELAB_MCP_HTTP_ADDR` + `HOMELAB_MCP_HTTP_TOKEN` | **required** — the address it listens on and the token it demands | [below](#over-http-instead) |
 
 ### A `.env` file
@@ -115,14 +114,17 @@ reach one of them.
 
 - **Where it is looked for**, in order: next to the executable, then one directory above it
   (`bin/server` → the root of the repo), then the working directory. The cwd is last and cannot
-  be relied on: a client that execs this binary sets it to whatever it happens to be. Point at
-  a file elsewhere with `HOMELAB_MCP_ENV_FILE=/path/to/file`, which then must exist.
-- **The environment always wins.** A variable already set is left alone and logged as such, so
-  a systemd `EnvironmentFile` or `VAR=x ./bin/server` still overrides the file. It is a fallback, not an authority.
-- **Syntax**: `KEY=VALUE`, one per line. `#` comments, blank lines and a leading `export` are
-  fine. Only the first `=` splits, so a base64 key ending in `=` survives. Quote a value to
-  protect spaces or a `#`. A malformed line is an error naming the line number rather than a
-  variable that silently never arrives.
+  be relied on — a systemd unit without `WorkingDirectory=` runs with `/` — but it is what lets
+  `go run ./cmd/server` from the repo root find the file, since `go run` builds the binary into
+  a temporary directory.
+- **The environment always wins.** A variable already set is left alone, so a systemd
+  `EnvironmentFile` or `VAR=x ./bin/server` still overrides the file. It is a fallback, not an authority.
+- **Syntax**: `KEY=VALUE`, one per line, parsed by
+  [`joho/godotenv`](https://github.com/joho/godotenv). `#` comments, blank lines and a leading
+  `export` are fine. Only the first `=` splits, so a base64 key ending in `=` survives. Quote a
+  value to protect spaces or a `#`. **A `$` is expanded**, so single-quote any secret containing
+  one — `KEY='a$b'`. Unquoted or in double quotes it is read as a variable reference and the
+  value arrives truncated. A malformed line is an error quoting the text it choked on.
 - Finding no file at all is not an error — most installs configure the server another way.
 
 Prefer a wrapper? The same file is valid shell:
@@ -135,8 +137,8 @@ exec /home/ubuntu/repos/Homelab-MCP/bin/server
 
 **What to avoid is the `VAR=value command` prefix for an API key.** The whole command line is
 world-readable through `/proc`, so `ps aux` on that machine shows it to any local user. A
-container allowlist is not a secret and is fine there; a key is not. For the same reason the
-server warns at startup if the `.env` it read is not `chmod 600`.
+container allowlist is not a secret and is fine there; a key is not. For the same reason, keep
+the `.env` itself `chmod 600` — the server does not check the permissions for you.
 
 > ⚠️ **An `env` block in your client's config does not reach this server.** The client speaks
 > HTTP to a process that was already running, with its own environment — nothing is handed over
@@ -145,19 +147,27 @@ server warns at startup if the `.env` it read is not `chmod 600`.
 
 ### Checking whether it took
 
-The server states what it found on startup, on stderr, in your client's MCP log:
+The server states what it registered on startup, on stderr — `journalctl -u homelab-mcp` for a
+systemd install:
 
 ```
-[homelab-mcp] env file /home/ubuntu/repos/Homelab-MCP/.env: set SERVER_URL, RADARR_API_KEY, SONARR_API_KEY
-[homelab-mcp] env file /home/ubuntu/repos/Homelab-MCP/.env: SERVER_URL already set in the environment, left alone
 [homelab-mcp] radarr at http://localhost:7878: read and write
 [homelab-mcp] sonarr at http://localhost:8989: read and write
-[homelab-mcp] client connected: name="claude-ai"; confirmations for actions: server-side, per command
+[homelab-mcp] MCP server running on transport streamable http at http://100.101.102.103:3000/mcp
 ```
 
-Variable **names** only — the values are the reason the file has restrictive permissions. If
-the assistant says it has no way to act on something, these lines are why: the tools were never
-registered, so it is telling the truth.
+A service missing from those lines was not configured, and its tools were never registered. If
+the assistant says it has no way to act on something, that is why: it is telling the truth.
+
+The `.env` itself is read silently. Only a failure to read one is logged, and it is not fatal:
+
+```
+[homelab-mcp] env file: /home/ubuntu/repos/Homelab-MCP/.env: unexpected character "\n" in variable name near "BROKEN LINE" — continuing without it
+```
+
+So a file that seems to have had no effect is either off the search path, or holds a variable
+that was already set in the environment and lost to it. Neither case is reported — check the
+service lines above against the `.env` you expected to be read.
 
 ## Approving actions
 

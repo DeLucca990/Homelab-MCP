@@ -507,7 +507,7 @@ silent. Silent truncation reads as a complete answer.
 | `Failed to call tool` on an action | Client declares no elicitation and `HOMELAB_MCP_TRUST_CLIENT_CONFIRMATION` is unset — see the connect-time log line |
 | Approved but refused | Fingerprint mismatch: the retry carried different arguments — or, for Radarr, the state it resolved against moved (§4.3) |
 | A warning is missing from one client | It was built in the renderer instead of the collector (§1) |
-| A `.env` exists and had no effect | It is not on the search path (beside the executable, one above, then the cwd — never trust the cwd), or the variable was already set in the environment and left alone. Both are logged at startup |
+| A `.env` exists and had no effect | It is not on the search path (beside the executable, one above, then the cwd — never trust the cwd), or the variable was already set in the environment and left alone. Neither is logged — only a file that failed to parse is |
 | Radarr answers a web page, not JSON | The URL points at a reverse proxy or the wrong port, or a subfolder install is missing its url base |
 | A tool changed but the model still sees the old schema | Schemas are generated at registration; restart the MCP client |
 
