@@ -99,8 +99,6 @@ func renderSearchResult(r radarr.SearchResult) string {
 	fmt.Fprintf(&b, "radarr is searching for %s (%d)\n", r.Title, r.Year)
 	fmt.Fprintf(&b, "command %d: %s\n", r.CommandID, blank(r.CommandStatus))
 
-	// The command being queued is not the film being found. Anything else would
-	// read as "done".
 	b.WriteString("\nthe search runs inside radarr; radarr_queue_status shows whether it " +
 		"grabbed anything, and an empty queue a minute from now means the indexers " +
 		"returned nothing\n")

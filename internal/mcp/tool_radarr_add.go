@@ -49,8 +49,6 @@ func handleRadarrAdd(
 			"'tmdb_id' is required — run radarr_movie_lookup first and take it from the result")
 	}
 
-	// Resolved before the confirmation, and again on the retry: the user
-	// approves a film and a destination, not a number.
 	plan, err := radarr.Plan(ctx, radarr.AddRequest{
 		TmdbID:              in.TmdbID,
 		QualityProfile:      in.QualityProfile,
@@ -85,9 +83,6 @@ func handleRadarrAdd(
 	}, out, nil
 }
 
-// Names the film and the destination in full. This is the last point at which
-// a person can notice that the wrong Dune is about to be downloaded onto the
-// wrong disk.
 func addConfirmationMessage(p radarr.AddPlan) string {
 	var b strings.Builder
 
@@ -133,9 +128,6 @@ func renderAddResult(r radarr.AddResult) string {
 	return b.String()
 }
 
-// boolOr reads an optional flag. The pointer is what lets "not supplied" default
-// to true — a plain bool would make every omitted flag false, so a caller that
-// simply asked for a movie would get one nobody is monitoring.
 func boolOr(v *bool, fallback bool) bool {
 	if v == nil {
 		return fallback

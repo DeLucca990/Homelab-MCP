@@ -305,11 +305,15 @@ sequenceDiagram
 ### Two kinds of client
 
 Whether the server can reach the human at all depends on a capability the client
-declares at `initialize`:
+declares. Under `2026-07-28` there is no `initialize` handshake to declare it
+once, so the client repeats it in
+`_meta.io.modelcontextprotocol/clientCapabilities` on every request, and the SDK
+surfaces it through the ephemeral session it rebuilds per call:
 
 - **Declares `elicitation`** — the server asks directly, per command, showing
-  the exact command. This is the path above.
-- **Does not declare it** (Claude Desktop, at the time of writing) — the server
+  the exact command. This is the path above. Claude Code has taken it since
+  2.1.76, March 2026.
+- **Does not declare it** (Claude Desktop, still, as of August 2026) — the server
   has no channel of its own. Those clients prompt for tool approval themselves,
   so a human is still in the loop, but the prompt is **per-tool, not
   per-command**, and a client set to always-allow stops asking.
@@ -317,10 +321,10 @@ declares at `initialize`:
 For the second case the server refuses by default. Setting
 `HOMELAB_MCP_TRUST_CLIENT_CONFIRMATION=1` makes it defer to the client's own
 prompt instead. That variable is the operator vouching for their setup, and it
-has to be the operator: **the identity a client reports at `initialize` is
-self-declared and unauthenticated**, so a server cannot recognise a trustworthy
-client — it can only be told. This is also why `clientName` feeds only the log
-and the refusal message, and never a branch.
+has to be the operator: **the identity a client reports is self-declared and
+unauthenticated**, so a server cannot recognise a trustworthy client — it can
+only be told. This is also why `clientName` feeds only the log and the refusal
+message, and never a branch.
 
 There is a third shape, invisible from the handler: on protocol versions before
 `2026-07-28` the SDK drives the round trip itself, sending the client an
@@ -328,14 +332,17 @@ There is a third shape, invisible from the handler: on protocol versions before
 later versions the input-required result goes back to the client, which retries.
 `requireApproval` is written against the handler's view and works either way.
 
-Which path a session got is logged once, at connect time:
+Which path a call took is not announced at connect time — there is no connect
+for a sessionless server to log. What the log does carry is the second path,
+written by `requireApproval` every time it acts on the client's prompt rather
+than its own:
 
 ```
-client connected: name="claude-ai"; confirmations for actions: server-side, per command
-client connected: name="claude-ai"; confirmations for actions: the client's own approval prompt
+restart jellyfin: proceeding on the approval prompt of "claude-ai" (HOMELAB_MCP_TRUST_CLIENT_CONFIRMATION is set)
 ```
 
-Without that line a refusal later looks arbitrary.
+The first path announces itself the other way round, by the confirmation the
+user is shown. Silence in both is the refusal, which says why.
 
 ### `requestedSchema` is required
 
@@ -536,7 +543,7 @@ silent. Silent truncation reads as a complete answer.
 | One service answers and another does not | `SERVER_URL` names a port, so it can only reach one of them — it has to stay a bare host for each to resolve its own (7878, 8989, 8096) |
 | Jellyfin health is missing its storage, tasks and plugins | The key authenticates but is not an administrator key; the warnings say so per section (§ [jellyfin](modules/jellyfin.md#admin-rights-are-a-second-axis-of-configured)) |
 | Jellyfin rejects a key that is definitely correct | It was sent as `X-Api-Key`, the way the `*arr` clients do it. Jellyfin reads neither that nor `X-Emby-Token` — only its own `Authorization: MediaBrowser …` scheme |
-| `Failed to call tool` on an action | Client declares no elicitation and `HOMELAB_MCP_TRUST_CLIENT_CONFIRMATION` is unset — see the connect-time log line |
+| `Failed to call tool` on an action | Client declares no elicitation and `HOMELAB_MCP_TRUST_CLIENT_CONFIRMATION` is unset — the refusal names the client it could not question |
 | Approved but refused | Fingerprint mismatch: the retry carried different arguments — or, for Radarr, the state it resolved against moved (§4.3) |
 | A warning is missing from one client | It was built in the renderer instead of the collector (§1) |
 | A `.env` exists and had no effect | It is not on the search path (beside the executable, one above, then the cwd — never trust the cwd), or the variable was already set in the environment and left alone. Neither is logged — only a file that failed to parse is |

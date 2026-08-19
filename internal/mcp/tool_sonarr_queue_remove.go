@@ -91,10 +91,6 @@ func handleSonarrQueueRemove(
 	}, out, nil
 }
 
-// States what is being thrown away, how far along it was, and how many episodes
-// go with it: 4% of a download and 96% of one are the same request and very
-// different losses, and one episode and a fourteen-episode season pack are the
-// same row.
 func sonarrQueueRemoveMessage(
 	i sonarr.QueueItem,
 	siblings []sonarr.QueueItem,
@@ -114,7 +110,6 @@ func sonarrQueueRemoveMessage(
 	b.WriteString("\n")
 	fmt.Fprintf(&b, "    status: %s\n", sonarrQueueStatusCell(i))
 
-	// The row is one episode; the file may be a season.
 	if len(siblings) > 0 {
 		fmt.Fprintf(&b, "\nTHIS DOWNLOAD HOLDS %d EPISODES — one file, %d queue rows, and "+
 			"removing this row removes all of them: %s\n",
@@ -139,10 +134,6 @@ func sonarrQueueRemoveMessage(
 	return b.String()
 }
 
-// siblingCodes lists the episodes riding on the same file, capped so a
-// forty-episode pack does not fill the confirmation. Rows the download client
-// holds that Sonarr cannot match to an episode have no code, and are counted
-// rather than rendered as a run of commas.
 func siblingCodes(item sonarr.QueueItem, siblings []sonarr.QueueItem) string {
 	var codes []string
 	unnamed := 0

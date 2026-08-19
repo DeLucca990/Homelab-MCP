@@ -21,7 +21,5 @@ func handleHostInfo(
 	if err != nil {
 		return nil, system.HostInfo{}, err
 	}
-	// A nil CallToolResult lets the SDK serialize info as both content and
-	// structuredContent.
 	return nil, info, nil
 }

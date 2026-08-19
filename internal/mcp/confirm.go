@@ -12,17 +12,11 @@ import (
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// The human-in-the-loop round trip shared by every state-changing tool. It is
-// the security boundary of the whole server, so it lives in exactly one place:
-// a fix applied to one copy and missed in another would fail silently.
-
+// The human-in-the-loop round trip shared by every state-changing tool.
 const confirmKey = "confirm"
 
 // trustClientEnv is the operator vouching that their client prompts before
 // calling a tool, so this server may act without a confirmation of its own.
-// It has to be the operator: the identity a client reports at initialize is
-// self-declared, so a server cannot recognise a trustworthy client, only be
-// told. Unset, a client the server cannot question gets refused.
 const trustClientEnv = "HOMELAB_MCP_TRUST_CLIENT_CONFIRMATION"
 
 func trustClientConfirmation() bool {
@@ -42,11 +36,6 @@ func emptyElicitSchema() map[string]any {
 	}
 }
 
-// These read the session rather than the request because that is where the SDK
-// keeps the identity a client declared. Over stateless HTTP there is no session
-// to persist it, so the SDK rebuilds an ephemeral one per call out of the
-// request's _meta — which a 2026-07-28 client sends and an older one does not.
-
 // clientCanConfirm reports whether the client declared a channel the server can
 // use to reach the user. Without it, an input request cannot be fulfilled.
 func clientCanConfirm(ss *sdk.ServerSession) bool {
@@ -54,8 +43,6 @@ func clientCanConfirm(ss *sdk.ServerSession) bool {
 	return params != nil && params.Capabilities != nil && params.Capabilities.Elicitation != nil
 }
 
-// clientName is for the log and the refusal message only. Nothing branches on
-// it: it is self-declared, so it could not carry a decision honestly.
 func clientName(ss *sdk.ServerSession) string {
 	if params := initParams(ss); params != nil && params.ClientInfo != nil {
 		return params.ClientInfo.Name
@@ -84,21 +71,10 @@ func fingerprint(parts ...string) string {
 
 // approval describes one thing the user is being asked to approve.
 type approval struct {
-	// What the user reads. States the action verbatim rather than summarising
-	// it: this is the last point at which a human can tell the two apart.
-	message string
-
-	// Identifies the exact operation. Carried across the round trip and
-	// re-checked, so an approval cannot be reused for different arguments.
+	message     string
 	fingerprint string
-
-	// Prefixes the error when the action does not happen, e.g. "command not
-	// run". Phrased so the model reports what did NOT occur.
-	refusal string
-
-	// Names the operation in the server's log, e.g. "restart radarr" — the only
-	// record of what this server did once the conversation is gone.
-	subject string
+	refusal     string
+	subject     string
 }
 
 // requireApproval drives the confirmation round trip. It returns
@@ -107,11 +83,6 @@ type approval struct {
 // not proceed; and (true, nil, nil) once the user has approved this exact
 // operation.
 func requireApproval(req *sdk.CallToolRequest, a approval) (bool, *sdk.CallToolResult, error) {
-	// A client that declares no elicitation capability (Claude Desktop, at the
-	// time of writing) leaves the server no channel of its own to reach the
-	// user, so we defer to the approval prompt it shows before calling a tool.
-	// The trade: that prompt is per-tool where ours is per-command, and a
-	// client set to always-allow stops asking. The allowlist holds either way.
 	if len(req.Params.InputResponses) == 0 && !clientCanConfirm(req.Session) {
 		if !trustClientConfirmation() {
 			return false, nil, fmt.Errorf(

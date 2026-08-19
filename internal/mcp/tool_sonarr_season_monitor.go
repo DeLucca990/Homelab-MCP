@@ -48,8 +48,6 @@ func handleSonarrSeasonMonitor(
 				"sonarr_library_status with a 'term' naming this series to see which seasons it has")
 	}
 
-	// Resolved on both passes: the user approves a show, a season and a number
-	// of episodes, not three integers.
 	plan, err := sonarr.PlanSeasonMonitor(ctx, sonarr.SeasonMonitorRequest{
 		SeriesID:  in.SeriesID,
 		Season:    *in.Season,
@@ -59,8 +57,6 @@ func handleSonarrSeasonMonitor(
 		return nil, sonarr.SeasonMonitorResult{}, err
 	}
 
-	// Nothing to approve when nothing would change. Asking a human to confirm a
-	// no-op is how confirmations stop being read.
 	if !plan.AlreadySet {
 		approved, pending, err := requireApproval(req, approval{
 			message: seasonMonitorMessage(plan, in.SeriesID),
@@ -171,8 +167,6 @@ func monitoredWord(monitored bool) string {
 	return "unmonitored"
 }
 
-// A confirmation is read once, quickly, so it is written as a sentence rather
-// than as "1 episode(s) has/have".
 func plural(n int) string {
 	if n == 1 {
 		return ""

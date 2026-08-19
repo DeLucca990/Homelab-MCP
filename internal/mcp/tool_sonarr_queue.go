@@ -86,8 +86,6 @@ func renderSonarrQueue(q sonarr.Queue) string {
 	return b.String()
 }
 
-// The tracked state is what matters once the bytes have arrived: "completed" on
-// its own reads as done, while the file may still be sitting outside the library.
 func sonarrQueueStatusCell(i sonarr.QueueItem) string {
 	switch {
 	case i.TrackedState == "importBlocked":
@@ -103,7 +101,6 @@ func sonarrQueueStatusCell(i sonarr.QueueItem) string {
 	}
 }
 
-// An empty ETA is the signal, so it is rendered as one rather than as "-".
 func sonarrEtaCell(i sonarr.QueueItem) string {
 	if i.TimeLeftSeconds > 0 {
 		return compactDuration(i.TimeLeftSeconds)

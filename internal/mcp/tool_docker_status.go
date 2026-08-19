@@ -80,7 +80,6 @@ func renderContainerTable(status containers.ContainerStatus) string {
 
 	b.WriteString(table(cols, rows))
 
-	// Footer: what `docker ps` would not tell you.
 	for _, warn := range status.Warnings {
 		fmt.Fprintf(&b, "\nwarning: %s\n", warn)
 	}

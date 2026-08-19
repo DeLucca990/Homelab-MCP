@@ -85,8 +85,6 @@ func handleRadarrQueueRemove(
 	}, out, nil
 }
 
-// States what is being thrown away and how far along it was: 4% of a download
-// and 96% of one are the same request and very different losses.
 func queueRemoveMessage(i radarr.QueueItem, opts radarr.RemoveOptions) string {
 	var b strings.Builder
 

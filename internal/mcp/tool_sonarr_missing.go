@@ -91,8 +91,6 @@ func renderSonarrMissing(m sonarr.Missing) string {
 	return b.String()
 }
 
-// An episode nothing has ever searched for is a different problem from one
-// searched for last night, so "never" is said rather than rendered as a dash.
 func searchAgeCell(seconds uint64) string {
 	if seconds == 0 {
 		return "never"

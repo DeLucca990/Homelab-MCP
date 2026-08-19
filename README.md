@@ -189,9 +189,10 @@ film cannot add another, and approving a search of season 3 cannot search all ni
 
 Which side asks depends on the client:
 
-- **Clients that support MCP elicitation** get the request from the server, showing the exact
-  operation. This is per-command, and setting the tool to always-allow does not bypass it.
-- **Clients that do not** — Claude Desktop among them at the time of writing — cannot be asked
+- **Clients that support MCP elicitation** — Claude Code since 2.1.76, March 2026 — get the
+  request from the server, showing the exact operation. This is per-command, and setting the
+  tool to always-allow does not bypass it.
+- **Clients that do not** — Claude Desktop still among them as of August 2026 — cannot be asked
   anything by the server, so it refuses to act. They prompt for tool approval themselves, and
   you can tell the server to accept that with `HOMELAB_MCP_TRUST_CLIENT_CONFIRMATION=1`.
 
@@ -294,8 +295,10 @@ whether it could be shown a confirmation, and it does not act without one. It re
 itself the symptom. Set `HOMELAB_MCP_TRUST_CLIENT_CONFIRMATION=1` to accept the approval
 prompt that client shows before calling a tool — which is what Claude Desktop needs today.
 
-Note also that the `client connected:` startup line belongs to the old handshake, so over HTTP
-it never appears.
+Note also that there is no connect-time line in the log to consult: it belonged to the old
+handshake, which a sessionless server never performs. The refusal above is the whole signal —
+and, once the variable is set, the line the server writes each time it proceeds on the client's
+prompt instead of its own.
 
 #### Behind Tailscale
 

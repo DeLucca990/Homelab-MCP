@@ -83,8 +83,6 @@ func sonarrSearchConfirmationMessage(scope sonarr.SearchScope, requestedID int) 
 
 	fmt.Fprintf(&b, "Search for releases now?\n\n")
 	fmt.Fprintf(&b, "    %s (%d)   [series %d]\n", s.Title, s.Year, s.ID)
-	// The number asked for was a TVDB id. Say so: it is the difference between
-	// the show the caller meant and one that merely shares a number.
 	if requestedID != s.ID {
 		fmt.Fprintf(&b, "    (you gave %d, which is its TVDB id — Sonarr's id for it is %d)\n",
 			requestedID, s.ID)
@@ -124,8 +122,6 @@ func renderSonarrSearchResult(r sonarr.SearchResult) string {
 		fmt.Fprintf(&b, "episode ids: %s\n", strings.Join(ids, ", "))
 	}
 
-	// The command being queued is not the episodes being found. Anything else
-	// would read as "downloaded".
 	b.WriteString("\nthe search runs inside sonarr; sonarr_queue_status shows whether it " +
 		"grabbed anything, and an empty queue a minute from now means the indexers " +
 		"returned nothing\n")

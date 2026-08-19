@@ -56,9 +56,6 @@ func renderOverview(r overview.Report) string {
 	}
 	b.WriteString(table(cols, rows))
 
-	// Each section's own warnings, verbatim and attributed — the whole point of
-	// the tool is that these are the same sentences the area's own tool gives,
-	// so a reader never has to wonder whether the summary softened something.
 	for _, s := range r.Sections {
 		for _, w := range s.Warnings {
 			fmt.Fprintf(&b, "\nwarning: %s: %s\n", s.Name, w)
@@ -68,8 +65,6 @@ func renderOverview(r overview.Report) string {
 		}
 	}
 
-	// Named rather than implied: the summary is deliberately one line per area,
-	// and the next call is the point of it.
 	if next := nextSteps(r); next != "" {
 		fmt.Fprintf(&b, "\nfor the detail behind those lines: %s\n", next)
 	}
@@ -77,8 +72,6 @@ func renderOverview(r overview.Report) string {
 	return b.String()
 }
 
-// A glyph rather than the word, so the status column costs one character on
-// every row of a table whose usual answer is "everything is fine".
 func statusMark(status string) string {
 	switch status {
 	case overview.StatusAttention:

@@ -67,8 +67,6 @@ func renderLogs(r containers.LogsResult) string {
 	return b.String()
 }
 
-// Trims the nanoseconds off docker's RFC3339 log prefix: same information for
-// a reader, at two thirds the width, on every single line.
 func compactTimestamp(line string) string {
 	stamp, rest, found := strings.Cut(line, " ")
 	if !found || len(stamp) < 20 || stamp[4] != '-' || stamp[10] != 'T' {

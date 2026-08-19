@@ -35,7 +35,6 @@ func renderDiskTable(stats system.DiskStats) string {
 		return "no filesystem found\n"
 	}
 
-	// Text on the left, numbers on the right — same as df.
 	cols := []column{
 		{"Filesystem", alignLeft},
 		{"Size", alignRight},
@@ -48,7 +47,6 @@ func renderDiskTable(stats system.DiskStats) string {
 	rows := make([][]string, 0, len(stats.Filesystems))
 	for _, f := range stats.Filesystems {
 		if f.Error != "" {
-			// Unreachable mount: keep the row, flag the numbers.
 			rows = append(rows, []string{f.Device, "-", "-", "-", "-", f.Mountpoint})
 			continue
 		}
@@ -65,7 +63,6 @@ func renderDiskTable(stats system.DiskStats) string {
 	var b strings.Builder
 	b.WriteString(table(cols, rows))
 
-	// Footer: what `df -h` would not tell you.
 	for _, warn := range stats.Warnings {
 		fmt.Fprintf(&b, "\nwarning: %s\n", warn)
 	}

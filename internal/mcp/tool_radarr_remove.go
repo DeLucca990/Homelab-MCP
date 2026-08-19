@@ -50,8 +50,6 @@ func handleRadarrMovieRemove(
 		AddImportExclusion: boolOr(in.AddImportExclusion, false),
 	}
 
-	// Resolved on both passes: the user approves a film, a folder and a size,
-	// not an id, and the fingerprint covers what that id currently means.
 	movie, err := radarr.GetMovie(ctx, in.MovieID)
 	if err != nil {
 		return nil, radarr.DeleteResult{}, err
@@ -93,8 +91,6 @@ func movieRemoveMessage(m radarr.Movie, opts radarr.DeleteOptions, requestedID i
 
 	fmt.Fprintf(&b, "Remove this movie from the Radarr library?\n\n")
 	fmt.Fprintf(&b, "    %s (%d)   [movie %d]\n", m.Title, m.Year, m.ID)
-	// The number asked for was a TMDB id. Say so: it is the difference between
-	// the film the caller meant and one that merely shares a number.
 	if requestedID != m.ID {
 		fmt.Fprintf(&b, "    (you gave %d, which is its TMDB id — Radarr's id for it is %d)\n",
 			requestedID, m.ID)

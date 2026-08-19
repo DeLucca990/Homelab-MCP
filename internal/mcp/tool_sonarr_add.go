@@ -52,8 +52,6 @@ func handleSonarrAdd(
 			"'tvdb_id' is required — run sonarr_series_lookup first and take it from the result")
 	}
 
-	// Resolved before the confirmation, and again on the retry: the user
-	// approves a show and a destination, not a number.
 	plan, err := sonarr.Plan(ctx, sonarr.AddRequest{
 		TvdbID:         in.TvdbID,
 		QualityProfile: in.QualityProfile,
@@ -89,9 +87,6 @@ func handleSonarrAdd(
 	}, out, nil
 }
 
-// Names the show, the destination and the size of what is about to happen. This
-// is the last point at which a person can notice that nine seasons of the wrong
-// Office are about to be downloaded onto the wrong disk.
 func sonarrAddConfirmationMessage(p sonarr.AddPlan) string {
 	var b strings.Builder
 
@@ -131,8 +126,6 @@ func sonarrAddConfirmationMessage(p sonarr.AddPlan) string {
 	return b.String()
 }
 
-// The enum value alone does not say what it does, and the difference between
-// two of them is hundreds of downloads.
 func monitorMeaning(monitor string) string {
 	switch monitor {
 	case "all":
@@ -187,8 +180,6 @@ func renderSonarrAddResult(r sonarr.AddResult) string {
 	return b.String()
 }
 
-// nonEmptyOf drops the values that were not reported, so a line built from two
-// optional facts does not render as ", " when both are absent.
 func nonEmptyOf(values ...string) []string {
 	out := make([]string, 0, len(values))
 	for _, v := range values {

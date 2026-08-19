@@ -80,8 +80,6 @@ func renderSonarrLibrary(lib sonarr.Library) string {
 		b.WriteString("\n")
 	}
 
-	// One series was asked about, so the useful next question is which season is
-	// short — which is the only scale at which a per-season table fits.
 	if len(lib.Series) == 1 && len(lib.Series[0].Seasons) > 0 {
 		b.WriteString(renderSeasons(lib.Series[0]))
 	}
@@ -105,8 +103,6 @@ func renderSonarrLibrary(lib sonarr.Library) string {
 func renderSeasons(s sonarr.Series) string {
 	var b strings.Builder
 
-	// Left-aligned because season 0 renders as "0 (specials)", and right-aligning
-	// one wide label against single digits reads as a broken column.
 	cols := []column{
 		{"SEASON", alignLeft},
 		{"EPISODES", alignRight},
@@ -137,8 +133,6 @@ func renderSeasons(s sonarr.Series) string {
 	return b.String()
 }
 
-// The state of a series is never just "have it" or "not": it is how far through
-// the show Sonarr has got, and whether what is left is late or unaired.
 func seriesStateCell(s sonarr.Series) string {
 	switch {
 	case s.Missing && s.EpisodesOnDisk == 0:

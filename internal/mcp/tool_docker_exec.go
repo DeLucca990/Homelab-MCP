@@ -62,7 +62,6 @@ func handleExec(
 	}, out, nil
 }
 
-// Shows the command verbatim: this is what the user reads before deciding.
 func confirmationMessage(in execInput) string {
 	var b strings.Builder
 

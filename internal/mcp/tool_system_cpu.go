@@ -42,9 +42,6 @@ func handleCoreUsage(
 	}, out, nil
 }
 
-// One dense line per core. Deliberately no ASCII bar: it would be a visual
-// encoding of the number printed right beside it, costing tokens to say the
-// same thing. The full breakdown stays in structuredContent.
 func renderCores(cores []system.CoreUsage) string {
 	var b strings.Builder
 	for _, c := range cores {
