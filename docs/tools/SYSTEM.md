@@ -6,7 +6,7 @@ machine healthy?"* without an SSH session.
 Data comes from the kernel through
 [gopsutil](https://github.com/shirou/gopsutil), except `system_service_status`,
 which shells out to `systemctl`. Design notes:
-[docs/modules/system.md](../docs/modules/system.md).
+[docs/modules/system.md](../modules/system.md).
 
 | Tool | Input | What it answers |
 | --- | --- | --- |

@@ -2,7 +2,7 @@
 
 Eight tools over Radarr's v3 HTTP API — four that read, four that write. None of
 them exist until the server is told where the machine is and given an API key.
-Design notes: [docs/modules/radarr.md](../docs/modules/radarr.md).
+Design notes: [docs/modules/radarr.md](../modules/radarr.md).
 
 | Tool | Input | What it answers | Writes |
 | --- | --- | --- | --- |
@@ -26,7 +26,7 @@ Design notes: [docs/modules/radarr.md](../docs/modules/radarr.md).
 Without the first two, **none of these tools are registered** — a server with no
 Radarr configured cannot be asked to reach one. Both belong on the server side,
 in the environment of the process that runs the binary; the
-[README](../README.md#configuration) covers how to get them there.
+[README](../../README.md#configuration) covers how to get them there.
 
 `SERVER_URL` is not named for Radarr on purpose: it says *where the home server
 is*, and each integration resolves its own service against it — this one by

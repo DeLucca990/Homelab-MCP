@@ -1,8 +1,8 @@
 # Tools
 
 The reference for every tool this server exposes, one page per family. For *why*
-they are built the way they are, see [`docs/`](../docs/); this directory is the
-specification.
+they are built the way they are, see [`docs/modules/`](../modules/) and
+[`docs/ARCHITECTURE.md`](../ARCHITECTURE.md); this directory is the specification.
 
 | Family | Tools | Page |
 | --- | --- | --- |
@@ -118,7 +118,7 @@ the top.
 **Writes ask first.** The eleven tools that change something never act on the
 first call. They describe the operation, wait for a human decision, and bind the
 approval to the exact operation with a fingerprint. See
-[docs/ARCHITECTURE.md §3](../docs/ARCHITECTURE.md#3-waiting-for-a-user-response).
+[docs/ARCHITECTURE.md §3](../ARCHITECTURE.md#3-waiting-for-a-user-response).
 
 | Tool | Family | Guarded by |
 | --- | --- | --- |

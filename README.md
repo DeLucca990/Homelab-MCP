@@ -15,21 +15,21 @@ one page per family:
 
 | Family | Tools | Reference |
 | --- | --- | --- |
-| **Overview** | one call that checks every family below and reports only what is wrong | [tools/README.md](tools/README.md#homelab_overview) |
-| **System** | host info, CPU, memory, disk, systemd units | [tools/SYSTEM.md](tools/SYSTEM.md) |
-| **Docker** | container status, logs, and — opt-in — exec and restart | [tools/DOCKER.md](tools/DOCKER.md) |
-| **Radarr** | library, queue, lookup, health, and four writes | [tools/RADARR.md](tools/RADARR.md) |
-| **Sonarr** | library, missing episodes, queue, lookup, health, and five writes | [tools/SONARR.md](tools/SONARR.md) |
-| **Jellyfin** | who is watching what and what it costs, and the server's own health | [tools/JELLYFIN.md](tools/JELLYFIN.md) |
+| **Overview** | one call that checks every family below and reports only what is wrong | [docs/tools/README.md](docs/tools/README.md#homelab_overview) |
+| **System** | host info, CPU, memory, disk, systemd units | [docs/tools/SYSTEM.md](docs/tools/SYSTEM.md) |
+| **Docker** | container status, logs, and — opt-in — exec and restart | [docs/tools/DOCKER.md](docs/tools/DOCKER.md) |
+| **Radarr** | library, queue, lookup, health, and four writes | [docs/tools/RADARR.md](docs/tools/RADARR.md) |
+| **Sonarr** | library, missing episodes, queue, lookup, health, and five writes | [docs/tools/SONARR.md](docs/tools/SONARR.md) |
+| **Jellyfin** | who is watching what and what it costs, and the server's own health | [docs/tools/JELLYFIN.md](docs/tools/JELLYFIN.md) |
 
-What they are for, in one line each: [tools/README.md](tools/README.md).
+What they are for, in one line each: [docs/tools/README.md](docs/tools/README.md).
 
 It also exposes two surfaces that are not tools: **prompts**, which state the order to
-diagnose something in — *[triage](tools/PROMPTS.md#triage)* and
-*[why-no-download](tools/PROMPTS.md#why-no-download)* — and **resources**, which hold the
+diagnose something in — *[triage](docs/tools/PROMPTS.md#triage)* and
+*[why-no-download](docs/tools/PROMPTS.md#why-no-download)* — and **resources**, which hold the
 reference data the tools accept: the [quality profiles and root
-folders](tools/RESOURCES.md) each `*arr` actually has, and
-[what this install registered](tools/RESOURCES.md#homelabserverconfiguration) along with the
+folders](docs/tools/RESOURCES.md) each `*arr` actually has, and
+[what this install registered](docs/tools/RESOURCES.md#homelabserverconfiguration) along with the
 variable that would enable whatever it did not.
 
 The point of the whole thing is the details a plain `df -h` / `docker ps` / a glance at
@@ -93,12 +93,12 @@ changing any of them.
 
 | Variable | Enables | Reference |
 | --- | --- | --- |
-| `HOMELAB_MCP_ALLOW_CONTAINER_NAMES` | `docker_container_exec`, `docker_container_restart` | [tools/DOCKER.md](tools/DOCKER.md#turning-them-on) |
-| `SERVER_URL` + `RADARR_API_KEY` | the whole Radarr family | [tools/RADARR.md](tools/RADARR.md#configuration) |
-| `HOMELAB_MCP_RADARR_READONLY` | drops Radarr's four writes | [tools/RADARR.md](tools/RADARR.md#configuration) |
-| `SERVER_URL` + `SONARR_API_KEY` | the whole Sonarr family | [tools/SONARR.md](tools/SONARR.md#configuration) |
-| `HOMELAB_MCP_SONARR_READONLY` | drops Sonarr's five writes | [tools/SONARR.md](tools/SONARR.md#configuration) |
-| `SERVER_URL` + `JELLYFIN_API_KEY` | both Jellyfin tools | [tools/JELLYFIN.md](tools/JELLYFIN.md#configuration) |
+| `HOMELAB_MCP_ALLOW_CONTAINER_NAMES` | `docker_container_exec`, `docker_container_restart` | [docs/tools/DOCKER.md](docs/tools/DOCKER.md#turning-them-on) |
+| `SERVER_URL` + `RADARR_API_KEY` | the whole Radarr family | [docs/tools/RADARR.md](docs/tools/RADARR.md#configuration) |
+| `HOMELAB_MCP_RADARR_READONLY` | drops Radarr's four writes | [docs/tools/RADARR.md](docs/tools/RADARR.md#configuration) |
+| `SERVER_URL` + `SONARR_API_KEY` | the whole Sonarr family | [docs/tools/SONARR.md](docs/tools/SONARR.md#configuration) |
+| `HOMELAB_MCP_SONARR_READONLY` | drops Sonarr's five writes | [docs/tools/SONARR.md](docs/tools/SONARR.md#configuration) |
+| `SERVER_URL` + `JELLYFIN_API_KEY` | both Jellyfin tools | [docs/tools/JELLYFIN.md](docs/tools/JELLYFIN.md#configuration) |
 | `HOMELAB_MCP_TRUST_CLIENT_CONFIRMATION` | acting on clients that cannot show a server confirmation | [below](#approving-actions) |
 | `HOMELAB_MCP_HTTP_ADDR` + `HOMELAB_MCP_HTTP_TOKEN` | **required** — the address it listens on and the token it demands | [below](#over-http-instead) |
 
@@ -368,15 +368,16 @@ process, so nothing has to survive a hop.
 ## Documentation
 
 ```
-tools/     what each tool, prompt and resource takes and answers — the specification
-docs/      how it is built and why — the design
+docs/tools/            the specification — what each tool, prompt and resource takes and answers
+docs/modules/          the design — how each integration is built, and why
+docs/ARCHITECTURE.md   the shape both of those sit in
 ```
 
 | | |
 | --- | --- |
-| [tools/README.md](tools/README.md) | the tool index, the overview tool, and the conventions every tool shares |
-| [tools/PROMPTS.md](tools/PROMPTS.md) · [tools/RESOURCES.md](tools/RESOURCES.md) | the two surfaces that are not tools |
-| [tools/SYSTEM.md](tools/SYSTEM.md) · [tools/DOCKER.md](tools/DOCKER.md) · [tools/RADARR.md](tools/RADARR.md) · [tools/SONARR.md](tools/SONARR.md) · [tools/JELLYFIN.md](tools/JELLYFIN.md) | per-family reference |
+| [docs/tools/README.md](docs/tools/README.md) | the tool index, the overview tool, and the conventions every tool shares |
+| [docs/tools/PROMPTS.md](docs/tools/PROMPTS.md) · [docs/tools/RESOURCES.md](docs/tools/RESOURCES.md) | the two surfaces that are not tools |
+| [docs/tools/SYSTEM.md](docs/tools/SYSTEM.md) · [docs/tools/DOCKER.md](docs/tools/DOCKER.md) · [docs/tools/RADARR.md](docs/tools/RADARR.md) · [docs/tools/SONARR.md](docs/tools/SONARR.md) · [docs/tools/JELLYFIN.md](docs/tools/JELLYFIN.md) | per-family reference |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | layering, tool registration, the confirmation round trip, the fingerprint |
 | [docs/modules/](docs/modules/) | one page per integration: [system](docs/modules/system.md), [docker](docs/modules/docker.md), [radarr](docs/modules/radarr.md), [sonarr](docs/modules/sonarr.md), [jellyfin](docs/modules/jellyfin.md) |
 

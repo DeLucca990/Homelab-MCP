@@ -2,7 +2,7 @@
 
 Two tools over Jellyfin's HTTP API, both read-only. Neither exists until the
 server is told where the machine is and given an API key. Design notes:
-[docs/modules/jellyfin.md](../docs/modules/jellyfin.md).
+[docs/modules/jellyfin.md](../modules/jellyfin.md).
 
 | Tool | Input | What it answers | Writes |
 | --- | --- | --- | --- |

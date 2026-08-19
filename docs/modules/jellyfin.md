@@ -1,7 +1,7 @@
 # The Jellyfin module
 
 `internal/jellyfin/`, over Jellyfin's HTTP API. Tool reference:
-[tools/JELLYFIN.md](../../tools/JELLYFIN.md).
+[tools/JELLYFIN.md](../tools/JELLYFIN.md).
 
 The first module that is read-only end to end, and the first whose value is a
 *judgement* rather than a relay: almost everything here exists to turn a number

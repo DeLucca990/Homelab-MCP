@@ -1,7 +1,7 @@
 # The Sonarr module
 
 `internal/sonarr/`, over Sonarr's v3 HTTP API. Tool reference:
-[tools/SONARR.md](../../tools/SONARR.md).
+[tools/SONARR.md](../tools/SONARR.md).
 
 Built as a deliberate parallel to [the Radarr module](radarr.md): same gating,
 same URL normalisation, same resolve-then-act split, same fingerprinted

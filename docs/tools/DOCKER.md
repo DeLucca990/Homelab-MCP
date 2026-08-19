@@ -2,7 +2,7 @@
 
 Four tools over the Docker Engine API on the unix socket. Two read and are always
 registered; two act and exist **only when you name the containers they may
-touch**. Design notes: [docs/modules/docker.md](../docs/modules/docker.md).
+touch**. Design notes: [docs/modules/docker.md](../modules/docker.md).
 
 | Tool | Input | What it answers | Needs allowlist |
 | --- | --- | --- | --- |
@@ -87,7 +87,7 @@ Output is capped at 16 KiB, and truncation is reported.
 Both are **off unless you turn them on**, and both are guarded by three
 independent layers: an allowlist, your approval, and a fingerprint tying that
 approval to the exact operation. The full reasoning is in
-[docs/modules/docker.md](../docs/modules/docker.md).
+[docs/modules/docker.md](../modules/docker.md).
 
 ### Turning them on
 
@@ -116,7 +116,7 @@ restart your MCP client after changing it.
 > ⚠️ **Running over SSH? The `env` block above does not reach the server.** It
 > sets variables for the local `ssh` process, and SSH does not forward arbitrary
 > variables. Put them in the remote command instead, or use a `.env` on the
-> remote machine — see the [README](../README.md#configuration).
+> remote machine — see the [README](../../README.md#configuration).
 
 ### `docker_container_exec`
 

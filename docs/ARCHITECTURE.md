@@ -8,11 +8,11 @@ next to it:
 
 | Module | Design notes | Tool reference |
 | --- | --- | --- |
-| System and systemd | [modules/system.md](modules/system.md) | [tools/SYSTEM.md](../tools/SYSTEM.md) |
-| Docker | [modules/docker.md](modules/docker.md) | [tools/DOCKER.md](../tools/DOCKER.md) |
-| Radarr | [modules/radarr.md](modules/radarr.md) | [tools/RADARR.md](../tools/RADARR.md) |
-| Sonarr | [modules/sonarr.md](modules/sonarr.md) | [tools/SONARR.md](../tools/SONARR.md) |
-| Jellyfin | [modules/jellyfin.md](modules/jellyfin.md) | [tools/JELLYFIN.md](../tools/JELLYFIN.md) |
+| System and systemd | [modules/system.md](modules/system.md) | [tools/SYSTEM.md](tools/SYSTEM.md) |
+| Docker | [modules/docker.md](modules/docker.md) | [tools/DOCKER.md](tools/DOCKER.md) |
+| Radarr | [modules/radarr.md](modules/radarr.md) | [tools/RADARR.md](tools/RADARR.md) |
+| Sonarr | [modules/sonarr.md](modules/sonarr.md) | [tools/SONARR.md](tools/SONARR.md) |
+| Jellyfin | [modules/jellyfin.md](modules/jellyfin.md) | [tools/JELLYFIN.md](tools/JELLYFIN.md) |
 
 Written against `github.com/modelcontextprotocol/go-sdk` **v1.7.0**. The
 multi-round-trip behaviour described in §3 is SDK- and protocol-version
@@ -182,10 +182,10 @@ The test that settled every case here: *would this be a round trip whose
 successful outcome is an error?* Discovering a quality profile today means
 guessing a name and reading the refusal that lists them. That is reference data
 wearing a tool's clothes, so it became
-[a resource](../tools/RESOURCES.md). And *would a model reading only one tool
+[a resource](tools/RESOURCES.md). And *would a model reading only one tool
 description ever learn this?* The reason a Sonarr search finds nothing is that
 the season is unmonitored — a fact that lives in a different tool entirely, so it
-became [a prompt](../tools/PROMPTS.md).
+became [a prompt](tools/PROMPTS.md).
 
 Resources are `text/markdown` rather than JSON. A resource has one channel, not
 the two a tool result has, and its content is read rather than computed on — so

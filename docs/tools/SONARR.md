@@ -2,7 +2,7 @@
 
 Ten tools over Sonarr's v3 HTTP API — five that read, five that write. None of
 them exist until the server is told where the machine is and given an API key.
-Design notes: [docs/modules/sonarr.md](../docs/modules/sonarr.md).
+Design notes: [docs/modules/sonarr.md](../modules/sonarr.md).
 
 | Tool | Input | What it answers | Writes |
 | --- | --- | --- | --- |
@@ -70,7 +70,7 @@ here states the size of what is about to happen rather than just its name.
 Without both of the first two, **none of these tools are registered** — a server
 with no Sonarr configured cannot be asked to reach one. Both belong on the
 server side, in the environment of the process that runs the binary; the
-[README](../README.md#configuration) covers how to get them there.
+[README](../../README.md#configuration) covers how to get them there.
 
 **`SERVER_URL` is the same variable Radarr uses**, and that is the point: it says
 *where the home server is*, and each integration resolves its own service against

@@ -1,7 +1,7 @@
 # The system module
 
 `internal/system/` (host, CPU, memory, disk) and `internal/services/` (systemd
-units). Tool reference: [tools/SYSTEM.md](../../tools/SYSTEM.md).
+units). Tool reference: [tools/SYSTEM.md](../tools/SYSTEM.md).
 
 These are the only collectors that read the machine directly rather than talking
 to a service, and the only ones that run a binary.

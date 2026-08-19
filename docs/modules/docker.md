@@ -1,7 +1,7 @@
 # The Docker module
 
 `internal/containers/`, over the Engine API on the unix socket. Tool reference:
-[tools/DOCKER.md](../../tools/DOCKER.md).
+[tools/DOCKER.md](../tools/DOCKER.md).
 
 This is the module with the widest blast radius — the socket is root-equivalent —
 and it is the one whose action tools are off by default.

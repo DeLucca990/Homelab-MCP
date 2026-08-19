@@ -1,7 +1,7 @@
 # The Radarr module
 
 `internal/radarr/`, over Radarr's v3 HTTP API. Tool reference:
-[tools/RADARR.md](../../tools/RADARR.md).
+[tools/RADARR.md](../tools/RADARR.md).
 
 The first module whose operations are not self-describing: what `movie_id: 42`
 means depends on Radarr, and Radarr changes underneath. Most of what follows
