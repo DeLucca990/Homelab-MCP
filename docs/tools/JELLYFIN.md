@@ -1,13 +1,24 @@
 # Jellyfin tools
 
-Two tools over Jellyfin's HTTP API, both read-only. Neither exists until the
-server is told where the machine is and given an API key. Design notes:
+Twelve tools over Jellyfin's HTTP API — five that read, seven that write. None
+of them exist until the server is told where the machine is and given an API
+key. Design notes:
 [docs/modules/jellyfin.md](../modules/jellyfin.md).
 
 | Tool | Input | What it answers | Writes |
 | --- | --- | --- | --- |
 | `jellyfin_active_sessions` | `include_idle` | who is watching what, and what each stream costs the machine | – |
 | `jellyfin_system_health` | — | Jellyfin's version, its encoding settings, free space per folder, its scheduled tasks and any plugin that is not running | – |
+| `jellyfin_users` | — | every user's audio and subtitle preferences, libraries, bitrate cap and transcoding rights | – |
+| `jellyfin_find_item` | `term`, `user`, `limit` | whether a film, series or episode is in the library, with its id and path | – |
+| `jellyfin_activity_log` | `hours`, `limit`, `only_problems` | Jellyfin's own record: sign-ins, failed sign-ins, playback, failed tasks | – |
+| `jellyfin_library_scan` | `library` / `item_id` | makes Jellyfin look for new and changed files | **yes** |
+| `jellyfin_session_stop` | `session_id`, `message` | stops a stream — and its transcode, for a viewer who is gone | **yes** |
+| `jellyfin_session_message` | `session_id`, `text` | shows a message on someone's screen | **yes** |
+| `jellyfin_user_preferences_set` | `user`, `audio_language`, `subtitle_language`, `subtitle_mode`, … | which tracks the player picks for a user | **yes** |
+| `jellyfin_user_access_set` | `user`, `libraries`, `remote_bitrate_mbps`, `video_transcoding`, … | what a user can see and how they may stream | **yes** |
+| `jellyfin_transcoding_set` | `acceleration`, `device`, `decode_codecs`, … | hardware acceleration for every transcode | **yes** |
+| `jellyfin_mark_played` | `user`, `item_id`, `played` | marks watched or unwatched | **yes** |
 
 ## Configuration
 
@@ -15,18 +26,17 @@ server is told where the machine is and given an API key. Design notes:
 | --- | --- |
 | `SERVER_URL` | the server the services run on: `http://localhost` when this binary runs on that same machine, otherwise `http://10.0.0.4` or `https://media.example.com/jellyfin` |
 | `JELLYFIN_API_KEY` | Jellyfin → Dashboard → API Keys → **+** |
+| `HOMELAB_MCP_JELLYFIN_READONLY` | set to `1` to drop the seven writes, leaving the five reads |
 
-Without both, **neither tool is registered**. `SERVER_URL` is the same variable
+Without the first two, **none of these tools are registered**. `SERVER_URL` is the same variable
 Radarr and Sonarr read, and each fills in its own port — Jellyfin's is **8096**,
 so `http://localhost` and `http://localhost:8096` are the same thing here. Write
 it with a port and it can only address one of the three services.
 
-There is no `HOMELAB_MCP_JELLYFIN_READONLY`. Both tools are reads, so there
-would be nothing for it to drop; it appears when a write does.
-
 **Use a key from the dashboard, not one lifted from a browser session.** Three
 of the five requests behind `jellyfin_system_health` are administrator-only, and
-a key without those rights loses those sections. It does not fail the call — it
+a key without those rights loses those sections — as do the users, the activity
+log and every write but the session ones. It does not fail the call — it
 answers with what it could read and a warning naming each section it could not,
 which is how you find out that is what happened.
 
@@ -178,3 +188,185 @@ fine on a server this tool warns about: it was asked a different question, and a
 machine with no GPU would otherwise need attention every second of its life. The
 moment the configuration actually costs something, it shows up in the overview
 as a software transcode from `jellyfin_active_sessions`.
+
+---
+
+## `jellyfin_users`
+
+No parameters. Administrator key.
+
+```
+USER   ROLE   AUDIO  SUBS  SUB MODE  LIBRARIES  REMOTE   TRANSCODE  SEEN
+Ana    user   -      por   Smart     Movies     8 Mbps   no         2h3m
+Pedro  admin  eng    -     Default   all        no cap   yes        4m
+```
+
+The first call for two questions that sound like faults and are settings:
+
+- **"It always starts with the wrong subtitles"** — the subtitle language and
+  mode. `Default` follows the file's own flags; `Smart` loads the preferred
+  language only when the audio is in another one.
+- **"It fails for her and not for me"** — very often video transcoding switched
+  off for that user, so a file her TV cannot play directly fails instead of
+  being converted. That is a warning.
+
+Languages are Jellyfin's three-letter codes.
+
+---
+
+## `jellyfin_find_item`
+
+| Parameter | Type | Meaning |
+| --- | --- | --- |
+| `term` | string | required, part of the title |
+| `user` | string | also show whether this user has watched each item |
+| `limit` | integer | default `20`, max `100` |
+
+The Jellyfin half of *"Radarr imported it and I cannot find it"*. Absent here
+while the file is on disk means the library has not caught up —
+`jellyfin_library_scan` fixes that. Returns each item's id, which the scan and
+`jellyfin_mark_played` take, its path and when it was added.
+
+---
+
+## `jellyfin_activity_log`
+
+| Parameter | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `hours` | integer | `24` | max `720` |
+| `limit` | integer | `50` | max `200` |
+| `only_problems` | boolean | `false` | warnings, errors and failed sign-ins only |
+
+Jellyfin's own record, newest first: who signed in and from where, who failed
+to, what was played, which task failed, which plugin changed. Five or more
+failed sign-ins in the window is a warning — on a server reachable from the
+internet, that is someone guessing passwords. Administrator key.
+
+---
+
+## `jellyfin_library_scan`
+
+| Parameter | Type | Meaning |
+| --- | --- | --- |
+| `library` | string | one library, by name (`homelab://jellyfin/libraries`) |
+| `item_id` | string | one item, from `jellyfin_find_item` |
+
+Neither: every library. **Asks first**, naming the scope and its folders. The
+same request Jellyfin's own *Scan library* button sends — new and changed files
+are picked up, metadata and images someone edited are kept. A full scan warns
+what it costs; the narrowest scope that answers the question is the one to use.
+It returns once queued.
+
+---
+
+## `jellyfin_session_stop`
+
+| Parameter | Type | Meaning |
+| --- | --- | --- |
+| `session_id` | string | required, from a fresh `jellyfin_active_sessions` |
+| `message` | string | shown on their screen first |
+
+**Asks first**, naming who is watching what and how it will be stopped. Two
+different operations, sent as they apply:
+
+- **Stop the app** — a command to the client. Only arrives if the app is still
+  connected and accepts remote control.
+- **End the transcode** — kills the ffmpeg process on the server, by device and
+  play session. This is what frees the CPU for the stale session
+  `jellyfin_active_sessions` flags: its viewer closed the lid, the app will never
+  receive a stop, and the transcode kept running.
+
+A direct play on an app without remote control is refused: nothing on the
+server is doing work for it, and it ends when the client lets go.
+
+---
+
+## `jellyfin_session_message`
+
+| Parameter | Type | Meaning |
+| --- | --- | --- |
+| `session_id` | string | required |
+| `text` | string | required; shown for ten seconds |
+
+**Asks first**, with the exact text. Only apps that accept remote control can
+show one; the others are refused rather than silently ignored.
+
+---
+
+## `jellyfin_user_preferences_set`
+
+| Parameter | Type | Meaning |
+| --- | --- | --- |
+| `user` | string | required, by name |
+| `audio_language` | string | `por`, `eng`, `pt-BR`, a name — `none` clears it |
+| `subtitle_language` | string | same forms |
+| `subtitle_mode` | string | `Default`, `Always`, `Smart`, `OnlyForced`, `None` |
+| `remember_subtitle_selections` | boolean | whether a hand-picked track wins next time |
+
+The other half of *"I want Portuguese subtitles"*: Bazarr puts the file on disk,
+this makes the player pick it. **Asks first**, with each value before and after
+and what the new mode does.
+
+**Portuguese is `por`, whichever Portuguese.** Jellyfin matches on the language
+tag in the file, and Brazil and Portugal share it — so `pt-BR`, `pb` and
+`Portuguese` all land on `por`, and a `pt-BR` subtitle from Bazarr matches it.
+`Always` or `Smart` with no subtitle language set is warned about: they pick by
+language, and would pick nothing.
+
+Only the fields passed change; the rest of the user's preferences go back
+exactly as they were. Applies from the next playback; some third-party apps
+apply their own track rules instead.
+
+---
+
+## `jellyfin_user_access_set`
+
+| Parameter | Type | Meaning |
+| --- | --- | --- |
+| `user` | string | required, by name |
+| `libraries` | string[] | replaces the list; `["all"]` for every library |
+| `remote_bitrate_mbps` | number | cap away from home; `0` removes it |
+| `video_transcoding` | boolean | whether video may be re-encoded for them |
+| `remuxing` | boolean | |
+| `disabled` | boolean | signs them out everywhere and blocks sign-in |
+
+**Asks first**, with each value before and after. Covers what a household
+changes, and deliberately not administrator rights or passwords. Administrators
+cannot be disabled — Jellyfin refuses, and so does this, before asking. A cap
+under 8 Mbps is warned about: most 1080p files are then transcoded down for
+that user away from home, an encode per stream.
+
+---
+
+## `jellyfin_transcoding_set`
+
+| Parameter | Type | Meaning |
+| --- | --- | --- |
+| `acceleration` | string | `none`, `qsv`, `vaapi`, `nvenc`, `amf`, `videotoolbox`, `rkmpp`, `v4l2m2m` |
+| `device` | string | for `vaapi`/`qsv`, e.g. `/dev/dri/renderD128` |
+| `decode_codecs` | string[] | replaces the list: `h264`, `hevc`, `mpeg2video`, `mpeg4`, `vc1`, `vp8`, `vp9`, `av1` |
+| `hardware_encoding` | boolean | encode on the GPU too |
+| `tonemapping` | boolean | HDR to SDR |
+
+The setting with the widest reach: every transcode goes through it, and a
+backend the machine — or the container — cannot use makes every one of them
+fail. **Asks first**, and both the confirmation and the result carry the values
+that undo it. In Docker, the GPU has to be passed through (`/dev/dri` for
+VA-API and QSV, the NVIDIA runtime for NVENC), which the confirmation says.
+HEVC missing from the decode list is warned about: 4K still decodes on the CPU.
+
+To prove it worked: play something that needs a transcode and check
+`jellyfin_active_sessions` says `hardware transcode`.
+
+---
+
+## `jellyfin_mark_played`
+
+| Parameter | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `user` | string | — | required |
+| `item_id` | string | — | required, from `jellyfin_find_item` |
+| `played` | boolean | `true` | `false` for unwatched |
+
+**Asks first.** A series or season marks every episode in it; unwatched also
+clears the resume position.

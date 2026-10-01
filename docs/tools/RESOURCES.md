@@ -1,6 +1,6 @@
 # Resources
 
-Five of them, all `text/markdown`, all read-only. Where a tool measures the
+Eight of them, all `text/markdown`, all read-only. Where a tool measures the
 machine, a resource holds **reference data**: small, stable, and the answer to a
 question rather than a reading.
 
@@ -11,6 +11,9 @@ question rather than a reading.
 | `homelab://radarr/root-folders` | where it can put a film, and the free space on each | with Radarr |
 | `homelab://sonarr/quality-profiles` | the profile names `sonarr_series_add` accepts | with Sonarr |
 | `homelab://sonarr/root-folders` | where it can put a show, and the free space on each | with Sonarr |
+| `homelab://jellyfin/libraries` | the library names the Jellyfin writes take, with the folders each reads | with Jellyfin |
+| `homelab://prowlarr/sync-profiles` | the sync profiles and tags the Prowlarr writes accept, and which app each tag routes indexers to | with Prowlarr |
+| `homelab://bazarr/language-profiles` | the profiles `bazarr_language_profile_set` accepts, with their languages, and the language codes the subtitle tools take | with Bazarr |
 
 A client reads them with `resources/read`; most also let you attach one to a
 conversation directly.
@@ -107,3 +110,64 @@ Two things this states that the add tool's refusal would not:
   fills up.
 - **An unreachable folder.** A mount that went away leaves the folder configured
   in Radarr or Sonarr. An add against it succeeds, and nothing ever arrives.
+
+---
+
+## `homelab://bazarr/language-profiles`
+
+```markdown
+# Bazarr language profiles
+
+| Name | id | Languages | Cutoff | Auto-assigned by tag |
+| --- | --- | --- | --- | --- |
+| PT+EN | 1 | Portuguese (Brazil), English | Portuguese (Brazil) | - |
+
+## Languages enabled
+
+| Code | Name |
+| --- | --- |
+| `en` | English |
+| `pb` | Portuguese (Brazil) |
+```
+
+Two things in one place, because the subtitle tools need both and neither is
+guessable:
+
+- **The profiles, with their languages spelled out.** Bazarr returns a profile
+  as a list of language codes; the name alone ("Default") says nothing about
+  what assigning it will make Bazarr want.
+- **The codes.** Bazarr's are its own — `pb` is Brazilian Portuguese where `pt`
+  is European — and the table is what they are on this instance.
+
+---
+
+## `homelab://prowlarr/sync-profiles`
+
+```markdown
+## Tags
+
+| Tag | Apps that only take indexers with it |
+| --- | --- |
+| anime | Sonarr |
+```
+
+The sync profiles with what each lets the apps use an indexer for, the tags
+with the apps each one routes to, and every app's sync level. A tag is not a
+label here: it decides whether an app receives an indexer at all, and an add
+with the wrong one reaches nobody.
+
+---
+
+## `homelab://jellyfin/libraries`
+
+```markdown
+| Name | Type | Folders | Scanning |
+| --- | --- | --- | --- |
+| Movies | movies | /data/movies | no |
+| Shows | tvshows | /data/tv | yes |
+```
+
+The names `jellyfin_library_scan` and `jellyfin_user_access_set` take, and the
+folders behind them **as Jellyfin's container sees them**. Radarr and Sonarr may
+mount the same disk at a different path; a file imported to a folder no library
+reads never appears, and this table is where that mismatch becomes visible.

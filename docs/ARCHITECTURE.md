@@ -13,6 +13,8 @@ next to it:
 | Radarr | [modules/radarr.md](modules/radarr.md) | [tools/RADARR.md](tools/RADARR.md) |
 | Sonarr | [modules/sonarr.md](modules/sonarr.md) | [tools/SONARR.md](tools/SONARR.md) |
 | Jellyfin | [modules/jellyfin.md](modules/jellyfin.md) | [tools/JELLYFIN.md](tools/JELLYFIN.md) |
+| Prowlarr | [modules/prowlarr.md](modules/prowlarr.md) | [tools/PROWLARR.md](tools/PROWLARR.md) |
+| Bazarr | [modules/bazarr.md](modules/bazarr.md) | [tools/BAZARR.md](tools/BAZARR.md) |
 
 Written against `github.com/modelcontextprotocol/go-sdk` **v1.7.0**. The
 multi-round-trip behaviour described in §3 is SDK- and protocol-version
@@ -34,6 +36,8 @@ internal/containers/      docker                             (Engine API over th
 internal/radarr/          radarr                             (v3 HTTP API)
 internal/sonarr/          sonarr                             (v3 HTTP API)
 internal/jellyfin/        jellyfin                           (HTTP API)
+internal/prowlarr/        prowlarr                           (v1 HTTP API)
+internal/bazarr/          bazarr                             (HTTP API, form-encoded writes)
 ```
 
 One rule holds the layering together: **`internal/mcp` never touches the OS, and
@@ -125,16 +129,20 @@ stronger guarantee than one that exists and refuses:
 ```go
 if allowed := containers.ActionAllowlist(); len(allowed) > 0 { ... }  // docker actions
 if radarr.Configured() { ... }                                       // the radarr family
-if radarr.ReadOnly() { return }                                      // its four writes
+if radarr.ReadOnly() { return }                                      // its seven writes
 if sonarr.Configured() { ... }                                       // and the same, per service
-if jellyfin.Configured() { ... }                                     // both jellyfin tools
+if jellyfin.Configured() { ... }                                     // the jellyfin family
+if jellyfin.ReadOnly() { return }                                    // its seven writes
+if bazarr.Configured() { ... }                                       // the bazarr family
+if bazarr.ReadOnly() { return }                                      // its five writes
+if prowlarr.Configured() { ... }                                     // the prowlarr family
+if prowlarr.ReadOnly() { return }                                    // its four writes
 ```
 
-Jellyfin has no `ReadOnly()` predicate, and its absence is the rule rather than
-an omission: both of its tools are reads, so the switch would gate nothing — and
-a setting that turns nothing off is worse than an absent one, because an
-operator who sets it believes something happened. It arrives with the first
-write.
+Every family with writes has its own read-only switch, and a family without
+writes has none: a setting that turns nothing off is worse than an absent one,
+because an operator who sets it believes something happened. Jellyfin was that
+case until its first write, and the switch arrived with it.
 
 **Which means the environment must be complete before `New()` is called.**
 `cmd/server/main.go` loads the `.env` first for exactly that reason: a variable
@@ -151,18 +159,20 @@ that does not exist reads as authoritative and sends the model at nothing. So
 `why-no-download` is not registered without an `*arr`, and the tool names inside
 both prompts expand to the ones this install actually has.
 
-The result is 8 tools on a default install and up to 30 fully configured:
+The result is 8 tools on a default install and up to 74 fully configured:
 
 | Family | Always | Needs config | Confirms |
 |---|---|---|---|
 | Overview (1) | all | – | – |
 | System (5) | all | – | – |
 | Docker (4) | status, logs | exec, restart — **allowlist** | exec, restart |
-| Radarr (8) | – | all — **URL + API key** | add, search, remove, queue_remove |
-| Sonarr (10) | – | all — **URL + API key** | add, season_monitor, search, remove, queue_remove |
-| Jellyfin (2) | – | all — **URL + API key** | – |
+| Radarr (15) | – | all — **URL + API key** | add, search, remove, queue_remove, release_grab, import, movie_edit |
+| Sonarr (18) | – | all — **URL + API key** | add, season_monitor, search, remove, queue_remove, release_grab, import, series_edit, episode_monitor |
+| Jellyfin (12) | – | all — **URL + API key** | library_scan, session_stop, session_message, user_preferences_set, user_access_set, transcoding_set, mark_played |
+| Prowlarr (10) | – | all — **URL + API key** | indexer_update, indexer_add, indexer_remove, apps_sync |
+| Bazarr (9) | – | all — **URL + API key** | search, download, sync, profile_set, providers_reset |
 
-The three service families gate independently: one configured and the others not
+The five service families gate independently: one configured and the others not
 is a normal install, and each has its own key. Jellyfin has a second axis the
 others do not — most of what its health tool reads is administrator-only, so a
 key that authenticates can still be refused per request. That is handled inside
@@ -524,8 +534,18 @@ silent. Silent truncation reads as a complete answer.
 | restart settle | 15s, 3s stable window | Docker reports "running" the instant the process spawns |
 | Radarr/Sonarr API timeout | 10s | answered from the service's local database |
 | Jellyfin API timeout | 10s | answered from memory or its own database |
+| Prowlarr API timeout | 15s | answered from its own database |
+| Prowlarr search / indexer test | 2 min | goes out to the sites, some behind Cloudflare and FlareSolverr |
+| Prowlarr indexer catalogue | 1 min to read, kept 1h | several megabytes, and it changes when Prowlarr updates, not between calls |
+| Prowlarr indexer numbers | last 7 days | |
+| Bazarr API timeout | 15s | answered from its own database |
+| Bazarr provider search / download | 3 min | fans out to every subtitle site over the internet, and older versions answer only once all have |
+| Bazarr audio sync | 5 min | decodes the whole audio track |
+| Bazarr manual-search ids | 30 min, 2 000 kept | the token behind each stays on this server (§ [bazarr](modules/bazarr.md#a-manual-search-result-never-leaves-the-server)) |
 | Jellyfin session window | 900s | anything playing checks in constantly, so this excludes only idle devices |
 | Radarr/Sonarr lookup timeout | 30s | proxied to a metadata service over the internet |
+| Radarr/Sonarr interactive search, manual import, client test | 3 min | goes out to every indexer, or reads a whole download folder |
+| Radarr/Sonarr release and import ids | 30 min | the *arr's own cache of an interactive search lasts as long |
 | Radarr/Sonarr queue page | 200 items | the API pages at 10 |
 | Radarr/Sonarr library listing | 25 default, 200 max | a full dump buries the answer |
 | Sonarr episode listing | 25 default, 200 max | a library-wide Wanted list runs to thousands |
@@ -540,7 +560,13 @@ silent. Silent truncation reads as a complete answer.
 | Model says it has no Radarr tools | One of `SERVER_URL` / `RADARR_API_KEY` is unset, or the URL would not parse — the connect-time log says which |
 | Model says it has no Sonarr tools | Same, for `SERVER_URL` / `SONARR_API_KEY` |
 | Model says it has no Jellyfin tools | Same, for `SERVER_URL` / `JELLYFIN_API_KEY` |
-| One service answers and another does not | `SERVER_URL` names a port, so it can only reach one of them — it has to stay a bare host for each to resolve its own (7878, 8989, 8096) |
+| Model says it has no Prowlarr tools | Same, for `SERVER_URL` / `PROWLARR_API_KEY` |
+| Disabled an indexer in Prowlarr and Sonarr still uses it | Sonarr is on Add Only, which never receives edits (§ [prowlarr](modules/prowlarr.md#where-a-change-lands)) |
+| An indexer works in Prowlarr and is missing from an app | The app has tags and the indexer shares none — `prowlarr_applications` lists what reaches each |
+| Model says it has no Bazarr tools | Same, for `SERVER_URL` / `BAZARR_API_KEY` |
+| A Bazarr subtitle arrived in European Portuguese | `pt` was asked for; Brazilian is Bazarr's own `pb`. The tools map `pt-BR` onto it — a bare `pt` is taken at its word (§ [bazarr](modules/bazarr.md#languages-bazarrs-codes-are-not-iso)) |
+| `bazarr_subtitle_download` says the id is unknown | Older than 30 minutes, or listed before the server restarted — run `bazarr_subtitle_candidates` again |
+| One service answers and another does not | `SERVER_URL` names a port, so it can only reach one of them — it has to stay a bare host for each to resolve its own (7878, 8989, 9696, 8096, 6767) |
 | Jellyfin health is missing its storage, tasks and plugins | The key authenticates but is not an administrator key; the warnings say so per section (§ [jellyfin](modules/jellyfin.md#admin-rights-are-a-second-axis-of-configured)) |
 | Jellyfin rejects a key that is definitely correct | It was sent as `X-Api-Key`, the way the `*arr` clients do it. Jellyfin reads neither that nor `X-Emby-Token` — only its own `Authorization: MediaBrowser …` scheme |
 | `Failed to call tool` on an action | Client declares no elicitation and `HOMELAB_MCP_TRUST_CLIENT_CONFIRMATION` is unset — the refusal names the client it could not question |
@@ -561,7 +587,10 @@ silent. Silent truncation reads as a complete answer.
 | Change the confirmation flow itself | `internal/mcp/confirm.go` — one place, on purpose |
 | Change table formatting | `internal/mcp/render.go` |
 | Change what may be acted on | `internal/containers/allowlist.go` |
-| Change how Radarr, Sonarr or Jellyfin is addressed or authenticated | `internal/radarr/client.go`, `internal/sonarr/client.go`, `internal/jellyfin/client.go` |
+| Change how Radarr, Sonarr, Prowlarr, Jellyfin or Bazarr is addressed or authenticated | `internal/radarr/client.go`, `internal/sonarr/client.go`, `internal/prowlarr/client.go`, `internal/jellyfin/client.go`, `internal/bazarr/client.go` |
+| Change which Jellyfin user fields a write may touch | `PlanPreferences` / `PlanAccess` in `internal/jellyfin/userwrite.go` |
+| Change what counts as a credential | `isSecret` in `internal/prowlarr/apps.go` |
+| Change which spellings map to a Bazarr language | `languageAliases` in `internal/bazarr/languages.go` |
 | Change what a Jellyfin stream is judged to cost | `classifyWork` in `internal/jellyfin/sessions.go` |
 | Change what is resolved before an add is approved | `radarr.Plan` / `sonarr.Plan` in the module's `add.go` |
 | Change how much a Sonarr search covers | `sonarr.ResolveSearch` in `internal/sonarr/search.go` |

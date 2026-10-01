@@ -22,6 +22,9 @@ const APIKeyEnv = "SONARR_API_KEY"
 
 const ReadOnlyEnv = "HOMELAB_MCP_SONARR_READONLY"
 
+// serviceName is how this client names its service in an error.
+const serviceName = "sonarr"
+
 const (
 	defaultPort = "8989"
 
@@ -143,6 +146,36 @@ func (c *client) post(ctx context.Context, path string, body, out any) error {
 // body is the one that came off the wire rather than one built here.
 func (c *client) put(ctx context.Context, path string, body, out any) error {
 	return c.do(ctx, http.MethodPut, path, nil, body, out, requestTimeout)
+}
+
+// postRaw sends a POST and hands back the status and body whatever the status
+// is, for the one kind of endpoint whose failure carries the answer: testall
+// replies 400 as soon as any provider fails, with every result in the body.
+func (c *client) postRaw(ctx context.Context, path string, timeout time.Duration) (int, []byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base+apiPrefix+path, nil)
+	if err != nil {
+		return 0, nil, err
+	}
+	req.Header.Set("X-Api-Key", c.key)
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		if ctx.Err() != nil {
+			return 0, nil, fmt.Errorf("%s at %s did not answer within %s", serviceName, c.base, timeout)
+		}
+		return 0, nil, fmt.Errorf("%w at %s: %v", ErrUnreachable, c.base, err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return resp.StatusCode, body, fmt.Errorf("%s rejected the API key (%s) — check %s",
+			serviceName, resp.Status, APIKeyEnv)
+	}
+	return resp.StatusCode, body, nil
 }
 
 func (c *client) delete(ctx context.Context, path string, query url.Values) error {

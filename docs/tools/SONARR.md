@@ -1,6 +1,6 @@
 # Sonarr tools
 
-Ten tools over Sonarr's v3 HTTP API — five that read, five that write. None of
+Eighteen tools over Sonarr's v3 HTTP API — nine that read, nine that write. None of
 them exist until the server is told where the machine is and given an API key.
 Design notes: [docs/modules/sonarr.md](../modules/sonarr.md).
 
@@ -10,12 +10,20 @@ Design notes: [docs/modules/sonarr.md](../modules/sonarr.md).
 | `sonarr_missing_episodes` | `series_id`, `limit` | which individual episodes are missing, when they aired, whether anything searched | – |
 | `sonarr_queue_status` | — | the download queue with per-item progress, stalls and blocked imports | – |
 | `sonarr_series_lookup` | `term`, `limit` | searches TheTVDB through Sonarr, returning candidates with their TVDB ids | – |
-| `sonarr_system_health` | — | Sonarr's version, uptime, root folders and its own failing health checks | – |
+| `sonarr_system_health` | `test_download_clients` | Sonarr's version, uptime, root folders, its own failing health checks and, on request, a download client test | – |
+| `sonarr_releases` | `episode_id` / `series_id` + `season`, `limit` | an interactive search: every release found, in Sonarr's order, with why each was rejected | – |
+| `sonarr_import_candidates` | `queue_id` / `folder` | what Sonarr makes of the files in a finished download, and its objection to each | – |
+| `sonarr_history` | `series_id`, `season`, `limit` | what was grabbed, imported, failed or deleted — and the blocklist | – |
+| `sonarr_calendar` | `days`, `past_days` | the episodes airing in a window | – |
 | `sonarr_series_add` | `tvdb_id`, … | adds a series and starts searching for it | **yes** |
 | `sonarr_season_monitor` | `series_id`, `season`, `monitored` | turns monitoring on or off for one season | **yes** |
 | `sonarr_series_search` | `series_id`, `season`, `episode_ids` | searches the indexers now for a series already in the library | **yes** |
 | `sonarr_series_remove` | `series_id`, … | removes a series from the library, by default deleting every episode file | **yes** |
 | `sonarr_queue_remove` | `queue_id`, … | removes one download from the queue | **yes** |
+| `sonarr_release_grab` | `id` | grabs a release picked from `sonarr_releases`, rejected or not | **yes** |
+| `sonarr_import` | `ids` | imports files picked from `sonarr_import_candidates` | **yes** |
+| `sonarr_series_edit` | `series_id`, `monitored`, `quality_profile`, `series_type`, tags | changes a series' settings | **yes** |
+| `sonarr_episode_monitor` | `episode_ids`, `monitored` | turns monitoring on or off for individual episodes | **yes** |
 
 ## Downloading one season
 
@@ -65,7 +73,7 @@ here states the size of what is about to happen rather than just its name.
 | --- | --- |
 | `SERVER_URL` | the server the services run on: `http://localhost` when this binary runs on that same machine, otherwise `http://10.0.0.4` |
 | `SONARR_API_KEY` | Sonarr → Settings → General → Security → API Key |
-| `HOMELAB_MCP_SONARR_READONLY` | set to `1` to drop the five writes, leaving monitoring only |
+| `HOMELAB_MCP_SONARR_READONLY` | set to `1` to drop the nine writes, leaving monitoring only |
 
 Without both of the first two, **none of these tools are registered** — a server
 with no Sonarr configured cannot be asked to reach one. Both belong on the
@@ -518,3 +526,127 @@ rather than removed.
 replace what you took out, so the episodes go back to monitored-and-missing and
 stay there until a scheduled search. The result says so, with the `series_id` to
 pass to `sonarr_series_search`.
+
+---
+
+## `sonarr_releases`
+
+| Parameter | Type | Meaning |
+| --- | --- | --- |
+| `episode_id` | integer | one episode |
+| `series_id` + `season` | integer | or one season — season packs included |
+| `limit` | integer | default `20`, max `100` |
+
+Sonarr's interactive search: every release the indexers returned, in the order
+Sonarr would prefer them, with what each covers (`S02E03`, `S02 (full season)`)
+and Sonarr's reason for rejecting it, summarised by reason at the end. The
+diagnosis when `sonarr_series_search` grabs nothing. An anime or daily show set
+to the wrong series type is searched under the wrong numbering, and an empty
+result says so. The `id` is valid for 30 minutes.
+
+---
+
+## `sonarr_release_grab`
+
+| Parameter | Type | Meaning |
+| --- | --- | --- |
+| `id` | string | required, from `sonarr_releases` |
+
+**Asks first.** Sends the release to the download client through Sonarr —
+including one Sonarr rejected; this is the override. A season pack is called out:
+every episode in it is imported, replacing worse files already on disk.
+
+---
+
+## `sonarr_import_candidates`
+
+| Parameter | Type | Meaning |
+| --- | --- | --- |
+| `queue_id` | integer | a download stuck on import, from `sonarr_queue_status` |
+| `folder` | string | or any folder, as Sonarr's container sees it |
+
+What Sonarr makes of each file of a finished download — which episodes it
+matched, quality, release group — and its objection. A season pack is many
+files. A file matched to **no episode** is flagged and cannot be imported from
+here: which episode it is, is exactly the judgement Sonarr could not make, and
+Sonarr's own dialog lets a person pick it.
+
+---
+
+## `sonarr_import`
+
+| Parameter | Type | Meaning |
+| --- | --- | --- |
+| `ids` | string[] | required, from `sonarr_import_candidates` |
+
+Sonarr's Manual Import. **Asks first**, file by file, with the episodes each
+goes to and the objection it overrides. Sends back exactly what Sonarr parsed.
+Import mode `auto`: moved for usenet, hardlinked or copied for torrents.
+
+---
+
+## `sonarr_series_edit`
+
+| Parameter | Type | Meaning |
+| --- | --- | --- |
+| `series_id` | integer | required |
+| `monitored` | boolean | `false` ignores the whole series; files stay |
+| `quality_profile` | string | by name |
+| `series_type` | string | `standard`, `daily` or `anime` |
+| `add_tags`, `remove_tags` | string[] | existing tags, by label |
+
+**Asks first**, with each value before and after, through Sonarr's series
+editor — only the named fields are sent. The series type is the fix for an anime
+searched under season numbering, or a talk show under episode numbers; the
+confirmation says it changes which releases match. Switching the series flag on
+does not switch its seasons on — they keep their own flags.
+
+---
+
+## `sonarr_episode_monitor`
+
+| Parameter | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `episode_ids` | integer[] | — | episodes of **one** series |
+| `monitored` | boolean | `true` | `false` to skip them |
+
+The switch below `sonarr_season_monitor`: *only get the finale*, *skip the recap
+episode*. **Asks first**, listing the episodes; ones that already have the flag
+are counted apart. Episodes from two series are refused. Monitoring does not
+search — `sonarr_series_search` with the same `episode_ids` does — and an
+episode of an unmonitored series is ignored whatever its own flag says, which
+the confirmation points out.
+
+---
+
+## `sonarr_history`
+
+| Parameter | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `series_id` | integer | — | one series, with its blocklist; omitted, recent events across the library |
+| `season` | integer | — | with `series_id`, one season |
+| `limit` | integer | `25` | max `200` |
+
+Newest first, per episode: grabbed, imported, failed with Sonarr's reason,
+deleted, renamed. For a series it adds the **blocklist**, filtered to that
+series even on Sonarr versions that ignore the filter.
+
+---
+
+## `sonarr_calendar`
+
+| Parameter | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `days` | integer | `7` | how far ahead, max `90` |
+| `past_days` | integer | `0` | also the recent past |
+
+Monitored episodes airing in the window, in air order and local time, each with
+whether it is downloaded and its episode id.
+
+---
+
+## Download client test
+
+`sonarr_system_health` with `test_download_clients=true` has Sonarr test every
+enabled download client, reading the 400 Sonarr answers with when one fails as
+the result it is.

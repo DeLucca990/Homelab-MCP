@@ -199,3 +199,36 @@ the removal result, the library warning — names it with the `movie_id` to use.
 `GetHealth` fans out four independent requests and tolerates partial failure: "the
 version is unknown" must not hide "your indexer is down". Only when all four fail
 is it reported as a connection problem.
+
+---
+
+## Acting on the diagnosis
+
+The first tools here diagnosed; the later ones act on what they find, and share
+three decisions with the Sonarr module.
+
+**Short ids for handles the model should not copy.** An interactive search
+result is grabbed by Radarr's guid and indexer, and a guid is often a whole URL
+with a key in it. The release is handed out under an 8-character id and the
+guid stays on this server for 30 minutes — Radarr's own cache of the search
+lasts that long too. The manual import candidates work the same way, keyed by
+path and size.
+
+**Radarr's order is kept.** `GET /release` returns releases already sorted by
+Radarr's decision engine, so the first approved one is the one Radarr would
+have grabbed. They are not re-sorted by seeders or size: the order is the
+information.
+
+**Edits go through the editor.** `PUT /movie/editor` takes ids and only the
+fields named, so an edit cannot send back a stale copy of the rest of the movie.
+Tag additions and removals are separate editor calls, because the editor applies
+one tag mode per request.
+
+**An import sends Radarr's own parse back.** A manual import file entry carries
+quality, languages and release group; they are copied from what
+`GET /manualimport` returned for that file, so the import records exactly what
+Radarr's own dialog would.
+
+**testall answers with a 400.** Testing the download clients returns
+`400 Bad Request` as soon as one fails, with every result in the body.
+`postRaw` reads the body whatever the status for exactly this.

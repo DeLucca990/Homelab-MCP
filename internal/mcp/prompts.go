@@ -6,6 +6,9 @@ import (
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/DeLucca990/homelab-mcp/internal/bazarr"
+	"github.com/DeLucca990/homelab-mcp/internal/jellyfin"
+	"github.com/DeLucca990/homelab-mcp/internal/prowlarr"
 	"github.com/DeLucca990/homelab-mcp/internal/radarr"
 	"github.com/DeLucca990/homelab-mcp/internal/sonarr"
 )
@@ -92,6 +95,22 @@ What to look for in each, beyond what the tool says on its own:
   nothing to download.`)
 	}
 
+	if prowlarr.Configured() {
+		b.WriteString(`
+- prowlarr (prowlarr_indexer_status) — an indexer can be enabled and have failed
+  every query this week; Radarr and Sonarr still list it and simply get nothing.
+  The failing column and the 7-day numbers are the finding, not the enabled flag.`)
+	}
+
+	if bazarr.Configured() {
+		b.WriteString(`
+- bazarr (bazarr_system_health) — the provider table is the finding. A throttled
+  provider is skipped silently until its timer runs out, so with all of them
+  throttled Bazarr is up, healthy and searching nothing. An "unknown" Sonarr or
+  Radarr version means it has lost that service and is working from a stale
+  copy of its library.`)
+	}
+
 	b.WriteString(`
 
 Report worst first, and only what is wrong. If nothing is, say so in one line
@@ -150,7 +169,38 @@ two are indistinguishable from the outside:
 	b.WriteString(`) — if the queue is empty. This is the
    answer to "nothing was found": the service can be up, healthy and idle while
    every indexer it has is refusing to answer or its download client is
-   unreachable, and it records exactly that here.`)
+   unreachable, and it records exactly that here. test_download_clients=true
+   checks the client too.
+
+   If health is clean, ask the indexers yourself (`)
+	b.WriteString(arrTools("_releases"))
+	b.WriteString(`):
+   every release they return is listed with the reason it was rejected, which
+   is usually the whole answer — a quality profile that wants nothing on offer,
+   a size limit, a language rule. A download stuck on import is the other
+   case: `)
+	b.WriteString(arrTools("_import_candidates"))
+	b.WriteString(` shows the files and the objection.`)
+
+	if prowlarr.Configured() {
+		b.WriteString(`
+
+   The indexers behind them live in Prowlarr: prowlarr_indexer_status says
+   which are failing, and prowlarr_search asks them directly whether any
+   release exists at all — nothing there means no search from the *arr will
+   find anything either. prowlarr_applications explains an indexer that works
+   in Prowlarr and is missing from the *arr (Add Only, or a tag mismatch).`)
+	}
+
+	if jellyfin.Configured() {
+		b.WriteString(`
+
+   If the library already says downloaded and it still cannot be watched, the
+   problem is on the Jellyfin side: jellyfin_find_item says whether Jellyfin
+   has it at all, and homelab://jellyfin/libraries whether the folder it was
+   imported to is one Jellyfin reads. A scan (jellyfin_library_scan) fixes the
+   first; only a path change fixes the second.`)
+	}
 
 	if sonarr.Configured() {
 		b.WriteString(`

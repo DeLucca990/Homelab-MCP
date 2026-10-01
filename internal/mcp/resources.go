@@ -3,12 +3,15 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/DeLucca990/homelab-mcp/internal/bazarr"
 	"github.com/DeLucca990/homelab-mcp/internal/containers"
 	"github.com/DeLucca990/homelab-mcp/internal/jellyfin"
+	"github.com/DeLucca990/homelab-mcp/internal/prowlarr"
 	"github.com/DeLucca990/homelab-mcp/internal/radarr"
 	"github.com/DeLucca990/homelab-mcp/internal/sonarr"
 	"github.com/DeLucca990/homelab-mcp/internal/system"
@@ -26,11 +29,14 @@ import (
 // assistant can only say "I have no way to do that" without ever knowing why.
 
 const (
-	resourceConfiguration  = "homelab://server/configuration"
-	resourceRadarrProfiles = "homelab://radarr/quality-profiles"
-	resourceRadarrFolders  = "homelab://radarr/root-folders"
-	resourceSonarrProfiles = "homelab://sonarr/quality-profiles"
-	resourceSonarrFolders  = "homelab://sonarr/root-folders"
+	resourceConfiguration     = "homelab://server/configuration"
+	resourceRadarrProfiles    = "homelab://radarr/quality-profiles"
+	resourceRadarrFolders     = "homelab://radarr/root-folders"
+	resourceSonarrProfiles    = "homelab://sonarr/quality-profiles"
+	resourceSonarrFolders     = "homelab://sonarr/root-folders"
+	resourceBazarrProfiles    = "homelab://bazarr/language-profiles"
+	resourceProwlarrSync      = "homelab://prowlarr/sync-profiles"
+	resourceJellyfinLibraries = "homelab://jellyfin/libraries"
 )
 
 func registerResources(s *sdk.Server) {
@@ -87,6 +93,43 @@ func registerResources(s *sdk.Server) {
 				"series is every episode of every season.",
 		}, handleSonarrFoldersResource)
 	}
+
+	if bazarr.Configured() {
+		s.AddResource(&sdk.Resource{
+			URI:      resourceBazarrProfiles,
+			Name:     "bazarr-language-profiles",
+			Title:    "Bazarr language profiles",
+			MIMEType: "text/markdown",
+			Description: "The language profiles bazarr_language_profile_set accepts, each with the " +
+				"subtitle languages it asks for, and the languages enabled on this Bazarr with the " +
+				"codes the subtitle tools take. Read this before choosing a profile or a language " +
+				"code — Bazarr's codes are not all ISO: Brazilian Portuguese is 'pb'.",
+		}, handleBazarrProfilesResource)
+	}
+
+	if jellyfin.Configured() {
+		s.AddResource(&sdk.Resource{
+			URI:      resourceJellyfinLibraries,
+			Name:     "jellyfin-libraries",
+			Title:    "Jellyfin libraries",
+			MIMEType: "text/markdown",
+			Description: "Jellyfin's libraries by name, with their type and the folders on disk each " +
+				"one reads. The names are what jellyfin_library_scan and jellyfin_user_access_set take; " +
+				"the paths are how to tell which library a file Radarr or Sonarr imported lands in.",
+		}, handleJellyfinLibrariesResource)
+	}
+
+	if prowlarr.Configured() {
+		s.AddResource(&sdk.Resource{
+			URI:      resourceProwlarrSync,
+			Name:     "prowlarr-sync-profiles",
+			Title:    "Prowlarr sync profiles and tags",
+			MIMEType: "text/markdown",
+			Description: "The sync profiles and tags prowlarr_indexer_update and prowlarr_indexer_add " +
+				"accept, and which app each tag routes indexers to. Read this before choosing a " +
+				"'sync_profile' or 'tags': a tag decides which apps receive an indexer at all.",
+		}, handleProwlarrSyncResource)
+	}
 }
 
 // --- the configuration ------------------------------------------------------
@@ -126,8 +169,8 @@ func handleConfigurationResource(ctx context.Context, req *sdk.ReadResourceReque
 		APIKeyEnv:    radarr.APIKeyEnv,
 		BaseURLEnv:   radarr.BaseURLEnv,
 		ReadOnlyEnv:  radarr.ReadOnlyEnv,
-		ReadTools:    "library, queue, lookup and health",
-		WriteTools:   "movie_add, movie_search, movie_remove, queue_remove",
+		ReadTools:    "library, queue, lookup, health, releases, import_candidates, history and calendar",
+		WriteTools:   "movie_add, movie_search, movie_remove, queue_remove, release_grab, import, movie_edit",
 		ProfilesURI:  resourceRadarrProfiles,
 		FoldersURI:   resourceRadarrFolders,
 		DefaultQuota: radarr.DefaultQualityProfile,
@@ -141,14 +184,16 @@ func handleConfigurationResource(ctx context.Context, req *sdk.ReadResourceReque
 		APIKeyEnv:    sonarr.APIKeyEnv,
 		BaseURLEnv:   sonarr.BaseURLEnv,
 		ReadOnlyEnv:  sonarr.ReadOnlyEnv,
-		ReadTools:    "library, missing episodes, queue, lookup and health",
-		WriteTools:   "series_add, series_search, season_monitor, series_remove, queue_remove",
+		ReadTools:    "library, missing episodes, queue, lookup, health, releases, import_candidates, history and calendar",
+		WriteTools:   "series_add, series_search, season_monitor, series_remove, queue_remove, release_grab, import, series_edit, episode_monitor",
 		ProfilesURI:  resourceSonarrProfiles,
 		FoldersURI:   resourceSonarrFolders,
 		DefaultQuota: sonarr.DefaultQualityProfile,
 	})
 
 	writeJellyfinConfiguration(&b)
+	writeBazarrConfiguration(&b)
+	writeProwlarrConfiguration(&b)
 
 	b.WriteString("## Approving an action\n\n")
 	if trustClientConfirmation() {
@@ -208,10 +253,9 @@ func writeArrConfiguration(b *strings.Builder, c arrConfig) {
 		c.WriteTools, c.DefaultQuota, c.ProfilesURI, c.FoldersURI)
 }
 
-// Jellyfin does not use the arrConfig shape: it has no quality profiles, no
-// root folders and — for now — no writes, so the paragraph it needs is a
-// different one. What it does have that the *arrs do not is a second way to be
-// half-configured, because most of what the health tool reads is admin-only.
+// Jellyfin does not use the arrConfig shape: it has no quality profiles and no
+// root folders. What it does have that the *arrs do not is a second way to be
+// half-configured, because most of what it reads and every write is admin-only.
 func writeJellyfinConfiguration(b *strings.Builder) {
 	b.WriteString("## Jellyfin\n\n")
 
@@ -223,14 +267,88 @@ func writeJellyfinConfiguration(b *strings.Builder) {
 		return
 	}
 
-	fmt.Fprintf(b, "Registered against %s, read-only: `jellyfin_active_sessions` and "+
-		"`jellyfin_system_health`. There is no read-only switch for this family because it "+
-		"has no writes to drop.\n\n", arrBaseURL(jellyfin.BaseURL))
+	const reads = "`jellyfin_active_sessions`, `jellyfin_system_health`, `jellyfin_users`, " +
+		"`jellyfin_find_item` and `jellyfin_activity_log`"
+	const writes = "`jellyfin_library_scan`, `jellyfin_session_stop`, `jellyfin_session_message`, " +
+		"`jellyfin_user_preferences_set`, `jellyfin_user_access_set`, `jellyfin_transcoding_set` " +
+		"and `jellyfin_mark_played`"
 
-	fmt.Fprintf(b, "Most of what `jellyfin_system_health` reads is administrator-only. A key "+
-		"issued from Jellyfin's Dashboard → API Keys has those rights; one taken from a user "+
-		"session does not, and the tool then answers with the sections it could read and a "+
-		"warning naming each one it could not. `%s` is that key.\n\n", jellyfin.APIKeyEnv)
+	fmt.Fprintf(b, "Registered against %s. Read-only tools: %s.\n\n", arrBaseURL(jellyfin.BaseURL), reads)
+
+	if jellyfin.ReadOnly() {
+		fmt.Fprintf(b, "The writes (%s) are **not** registered: `%s` is set. Unset it to "+
+			"restore them.\n\n", writes, jellyfin.ReadOnlyEnv)
+	} else {
+		fmt.Fprintf(b, "Writes registered, each asking before it acts: %s. The libraries, with "+
+			"their paths, are at `%s`.\n\n", writes, resourceJellyfinLibraries)
+	}
+
+	fmt.Fprintf(b, "Most of this is administrator-only. A key issued from Jellyfin's Dashboard "+
+		"→ API Keys has those rights; one taken from a user session does not, and the tools then "+
+		"say which request was refused. `%s` is that key.\n\n", jellyfin.APIKeyEnv)
+}
+
+// Bazarr has language profiles where the *arrs have quality profiles, and no
+// root folders — it writes next to whatever Radarr and Sonarr downloaded — so
+// it gets its own paragraph rather than the arrConfig shape.
+func writeBazarrConfiguration(b *strings.Builder) {
+	b.WriteString("## Bazarr\n\n")
+
+	if !bazarr.Configured() {
+		fmt.Fprintf(b, "**Not registered.** Set `%s` and `%s` on the machine running this "+
+			"server — %s expects a bare host, because each service fills in its own port "+
+			"(Bazarr's is 6767).\n\n",
+			bazarr.BaseURLEnv, bazarr.APIKeyEnv, bazarr.BaseURLEnv)
+		return
+	}
+
+	const reads = "`bazarr_system_health`, `bazarr_subtitle_status`, `bazarr_wanted_subtitles` " +
+		"and `bazarr_subtitle_candidates`"
+	const writes = "`bazarr_subtitle_search`, `bazarr_subtitle_download`, `bazarr_subtitle_sync`, " +
+		"`bazarr_language_profile_set` and `bazarr_providers_reset`"
+
+	fmt.Fprintf(b, "Registered against %s. Read-only tools: %s.\n\n", arrBaseURL(bazarr.BaseURL), reads)
+
+	if bazarr.ReadOnly() {
+		fmt.Fprintf(b, "The writes (%s) are **not** registered: `%s` is set. Unset it to "+
+			"restore them.\n\n", writes, bazarr.ReadOnlyEnv)
+		return
+	}
+
+	fmt.Fprintf(b, "Writes registered, each asking before it acts: %s. The language profiles and "+
+		"language codes this instance has are at `%s`.\n\n", writes, resourceBazarrProfiles)
+}
+
+// Prowlarr has sync profiles and tags where the *arrs have quality profiles
+// and root folders, so it gets its own paragraph.
+func writeProwlarrConfiguration(b *strings.Builder) {
+	b.WriteString("## Prowlarr\n\n")
+
+	if !prowlarr.Configured() {
+		fmt.Fprintf(b, "**Not registered.** Set `%s` and `%s` on the machine running this "+
+			"server — %s expects a bare host, because each service fills in its own port "+
+			"(Prowlarr's is 9696).\n\n",
+			prowlarr.BaseURLEnv, prowlarr.APIKeyEnv, prowlarr.BaseURLEnv)
+		return
+	}
+
+	const reads = "`prowlarr_system_health`, `prowlarr_indexer_status`, `prowlarr_indexer_test`, " +
+		"`prowlarr_applications`, `prowlarr_search` and `prowlarr_indexer_definitions`"
+	const writes = "`prowlarr_indexer_update`, `prowlarr_indexer_add`, `prowlarr_indexer_remove` " +
+		"and `prowlarr_apps_sync`"
+
+	fmt.Fprintf(b, "Registered against %s. Read-only tools: %s.\n\n", arrBaseURL(prowlarr.BaseURL), reads)
+
+	if prowlarr.ReadOnly() {
+		fmt.Fprintf(b, "The writes (%s) are **not** registered: `%s` is set. Unset it to "+
+			"restore them.\n\n", writes, prowlarr.ReadOnlyEnv)
+		return
+	}
+
+	fmt.Fprintf(b, "Writes registered, each asking before it acts: %s. Indexers are managed "+
+		"here and pushed into Radarr and Sonarr by Prowlarr — an indexer edited directly in an "+
+		"*arr is overwritten on the next Full Sync. The sync profiles and tags are at `%s`.\n\n",
+		writes, resourceProwlarrSync)
 }
 
 // arrBaseURL reports the address a service is configured against, or why it
@@ -397,4 +515,153 @@ func markdownResource(uri, text string) *sdk.ReadResourceResult {
 			Text:     text,
 		}},
 	}
+}
+
+// --- bazarr language profiles ----------------------------------------------
+
+func handleBazarrProfilesResource(ctx context.Context, req *sdk.ReadResourceRequest) (*sdk.ReadResourceResult, error) {
+	profiles, err := bazarr.GetProfiles(ctx)
+	if err != nil {
+		return nil, err
+	}
+	languages, err := bazarr.GetLanguages(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return markdownResource(req.Params.URI, renderBazarrProfiles(profiles, languages)), nil
+}
+
+func renderBazarrProfiles(profiles []bazarr.Profile, languages []bazarr.Language) string {
+	var b strings.Builder
+
+	b.WriteString("# Bazarr language profiles\n\n")
+
+	if len(profiles) == 0 {
+		b.WriteString("Bazarr has no language profile at all, so it wants no subtitle for " +
+			"anything and `bazarr_language_profile_set` has nothing to assign. One has to be " +
+			"created in Bazarr → Settings → Languages.\n\n")
+	} else {
+		b.WriteString("| Name | id | Languages | Cutoff | Auto-assigned by tag |\n| --- | --- | --- | --- | --- |\n")
+		for _, p := range profiles {
+			fmt.Fprintf(&b, "| %s | %d | %s | %s | %s |\n",
+				p.Name, p.ID, p.Describe(), blankAs(p.Cutoff, "-"), blankAs(p.Tag, "-"))
+		}
+		b.WriteString("\nPass a name or id as `profile` to `bazarr_language_profile_set`, or `none` " +
+			"to stop Bazarr wanting subtitles for something. The cutoff is the language that, once " +
+			"present, stops Bazarr looking for the others.\n\n")
+	}
+
+	b.WriteString("## Languages enabled\n\n")
+	var enabled []bazarr.Language
+	for _, l := range languages {
+		if l.Enabled {
+			enabled = append(enabled, l)
+		}
+	}
+	if len(enabled) == 0 {
+		b.WriteString("No language is enabled in Bazarr → Settings → Languages, so no profile can " +
+			"ask for one.\n")
+		return b.String()
+	}
+	b.WriteString("| Code | Name |\n| --- | --- |\n")
+	for _, l := range enabled {
+		fmt.Fprintf(&b, "| `%s` | %s |\n", l.Code2, l.Name)
+	}
+	b.WriteString("\nThe subtitle tools take these codes. They are Bazarr's own, and not all ISO " +
+		"639-1: `pb` is Brazilian Portuguese where `pt` is European, `zt` is Traditional Chinese, " +
+		"`ea` is Latin American Spanish. A language outside this list can still be passed to " +
+		"`bazarr_subtitle_search`, but some providers will not be asked for it.\n")
+
+	return b.String()
+}
+
+// --- prowlarr sync profiles and tags ------------------------------------------
+
+func handleProwlarrSyncResource(ctx context.Context, req *sdk.ReadResourceRequest) (*sdk.ReadResourceResult, error) {
+	apps, err := prowlarr.GetApplications(ctx, false)
+	if err != nil {
+		return nil, err
+	}
+	tags, err := prowlarr.GetTags(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return markdownResource(req.Params.URI, renderProwlarrSync(apps, tags)), nil
+}
+
+func renderProwlarrSync(a prowlarr.Applications, tags []prowlarr.Tag) string {
+	var b strings.Builder
+
+	b.WriteString("# Prowlarr sync profiles and tags\n\n")
+
+	b.WriteString("## Sync profiles\n\n")
+	if len(a.Profiles) == 0 {
+		b.WriteString("None — every indexer needs one, so none can be added until one exists " +
+			"(Settings → Apps → Sync Profiles).\n\n")
+	} else {
+		b.WriteString("| Name | id | The apps use the indexer for | Minimum seeders |\n| --- | --- | --- | --- |\n")
+		for _, p := range a.Profiles {
+			fmt.Fprintf(&b, "| %s | %d | %s | %d |\n", p.Name, p.ID, p.Describe(), p.MinimumSeeders)
+		}
+		b.WriteString("\nPass a name or id as `sync_profile`. A profile with every search off " +
+			"still syncs the indexer, and the app never uses it.\n\n")
+	}
+
+	b.WriteString("## Tags\n\n")
+	if len(tags) == 0 {
+		b.WriteString("No tags, so every indexer reaches every app that is syncing.\n\n")
+	} else {
+		b.WriteString("| Tag | Apps that only take indexers with it |\n| --- | --- |\n")
+		for _, t := range tags {
+			var apps []string
+			for _, app := range a.Applications {
+				if slices.Contains(app.Tags, t.Label) {
+					apps = append(apps, app.Name)
+				}
+			}
+			fmt.Fprintf(&b, "| %s | %s |\n", t.Label, blankAs(strings.Join(apps, ", "), "-"))
+		}
+		b.WriteString("\nAn app with no tags takes every indexer; an app with tags takes only " +
+			"indexers sharing one. A FlareSolverr proxy likewise only serves indexers sharing its " +
+			"tag. Tags are created in Prowlarr, not by these tools.\n\n")
+	}
+
+	b.WriteString("## Apps\n\n")
+	if len(a.Applications) == 0 {
+		b.WriteString("None — Prowlarr syncs to nothing.\n")
+	} else {
+		b.WriteString("| App | Sync level | Tags |\n| --- | --- | --- |\n")
+		for _, app := range a.Applications {
+			fmt.Fprintf(&b, "| %s | %s | %s |\n", app.Name, app.SyncLevel,
+				blankAs(strings.Join(app.Tags, ", "), "-"))
+		}
+		b.WriteString("\n`fullSync` apps take every change; `addOnly` apps only take new indexers.\n")
+	}
+
+	return b.String()
+}
+
+// --- jellyfin libraries ----------------------------------------------------------
+
+func handleJellyfinLibrariesResource(ctx context.Context, req *sdk.ReadResourceRequest) (*sdk.ReadResourceResult, error) {
+	libs, err := jellyfin.GetLibraries(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var b strings.Builder
+	b.WriteString("# Jellyfin libraries\n\n")
+	if len(libs) == 0 {
+		b.WriteString("Jellyfin has no library, so nothing on disk is visible in it.\n")
+		return markdownResource(req.Params.URI, b.String()), nil
+	}
+	b.WriteString("| Name | Type | Folders | Scanning |\n| --- | --- | --- | --- |\n")
+	for _, l := range libs {
+		fmt.Fprintf(&b, "| %s | %s | %s | %s |\n", l.Name, blankAs(l.Type, "mixed"),
+			blankAs(strings.Join(l.Paths, "<br>"), "-"), yesNo(l.Refreshing))
+	}
+	b.WriteString("\nA file only appears in Jellyfin if it is under one of these folders **as " +
+		"Jellyfin's container sees it** — Radarr and Sonarr may mount the same disk at a different " +
+		"path, and that mismatch is invisible from either side.\n")
+	return markdownResource(req.Params.URI, b.String()), nil
 }

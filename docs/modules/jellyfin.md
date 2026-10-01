@@ -3,8 +3,7 @@
 `internal/jellyfin/`, over Jellyfin's HTTP API. Tool reference:
 [tools/JELLYFIN.md](../tools/JELLYFIN.md).
 
-The first module that is read-only end to end, and the first whose value is a
-*judgement* rather than a relay: almost everything here exists to turn a number
+The first module whose value is a *judgement* rather than a relay: almost everything here exists to turn a number
 Jellyfin reports into the question someone actually has, which is "is this
 machine in trouble".
 
@@ -16,12 +15,11 @@ Gated on two variables, the same shape as the two `*arr` families:
 
 ```go
 if jellyfin.Configured() { ... }   // SERVER_URL and JELLYFIN_API_KEY both set
+if jellyfin.ReadOnly() { return }  // HOMELAB_MCP_JELLYFIN_READONLY: stops before the seven writes
 ```
 
-There is no `ReadOnly()` predicate. Both tools are reads, so it would gate
-nothing — and a switch that turns nothing off is worse than an absent one,
-because an operator who sets it believes something happened. It arrives with the
-first write.
+The read-only switch arrived with the first write, as this page used to promise
+it would: until then it would have gated nothing.
 
 A configured-but-unreachable Jellyfin **still registers** its tools, for the
 same reason as Radarr: a call that fails with a reason is more use than tools
@@ -245,6 +243,57 @@ headline — and `jellyfin_system_health` when the only warnings came from there
 
 ---
 
+## Writes
+
+Seven writes, each asking first. What they share is more interesting than what
+each does.
+
+### Whole objects, changed one field at a time
+
+A user's preferences (`/Users/Configuration`) and policy (`/Users/{id}/Policy`)
+and the server's encoding options (`/System/Configuration/encoding`) are each
+**replaced wholesale** on every write — a field left out of the body is reset to
+its default, and the policy includes things like the password reset provider
+that nothing here should touch. So every write reads the current object as an
+untyped map, sets the named fields, and sends everything else back exactly as
+it came. The approved operation is the one performed, and the tests assert that
+an unrelated field survives the round trip.
+
+### Routes that moved in 10.9
+
+Two writes moved: user configuration to `POST /Users/Configuration?userId=`,
+watched state to `/UserPlayedItems/{id}?userId=`. The new route is tried first
+and the old one only on a 404, so both older and current servers work. The
+client now has an `ErrNotFound` for exactly this: a 404 with a JSON body is
+Jellyfin saying "no such thing", distinct from a 404 with an HTML body, which
+is the wrong port.
+
+### Refusals with a reason
+
+A 403 used to mean one thing here — a key without administrator rights. With
+writes it can also be Jellyfin's own rule: *Administrators cannot be disabled*.
+A 403 carrying a sentence is now reported as that sentence.
+
+### Stopping a stream is two operations
+
+The dashboard's *Stop* is a command to the client app, and only arrives if the
+app is connected and accepts remote control. The stale session the sessions
+tool flags is precisely one whose app is gone — so the stop tool also ends the
+transcode on the server (`DELETE /Videos/ActiveEncodings`, by device and play
+session), which is what actually frees the CPU. It sends whichever applies and
+says which; a direct play with no remote control is refused, because the server
+is doing no work for it.
+
+### Portuguese is one language here
+
+Jellyfin stores a language preference as the three-letter tag found inside
+video files, and that tag is `por` for Brazil and Portugal alike. Bazarr's `pb`
+and `pt-BR` are therefore resolved to `por`, against the server's own culture
+list, and the confirmation says so rather than implying a distinction the player
+will not make.
+
+---
+
 ## What this module deliberately does not do
 
 Jellyfin's API is 294 endpoints. Most of them are the wrong shape for this
@@ -257,9 +306,12 @@ server, and two are the right shape for a tool that already exists:
   `sonarr_series_remove` are the right way to do that: they keep the `*arr` in
   step, where deleting through Jellyfin leaves Radarr believing the file is
   still there.
-- **User and policy writes** (`/Users/New`, `/Users/{id}/Policy`) — creating
-  accounts and changing permissions has no defence proportional to it here.
+- **Creating users, passwords and administrator rights** (`/Users/New`,
+  `/Users/{id}/Password`, `IsAdministrator`) — the access tool covers what a
+  household changes (libraries, bitrate, transcoding, disabling an account) and
+  nothing that would hand out or take away control of the server.
 - **Image, video, audio and subtitle streaming** — binary payloads, useless to a
   model.
-- **LiveTv, SyncPlay, Playlists, UserData** — client behaviour, not the state of
-  a machine.
+- **LiveTv, SyncPlay, Playlists, favourites, ratings** — client behaviour, not
+  the state of a machine. Watched state is the one exception, because "mark it
+  unwatched" is a thing people ask for.
