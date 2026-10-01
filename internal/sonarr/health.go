@@ -50,6 +50,8 @@ type Health struct {
 
 	RootFolders []RootFolderSpace `json:"root_folders,omitempty"`
 
+	DownloadClients []ClientTest `json:"download_clients,omitempty" jsonschema:"each enabled download client's test result, when a test was asked for"`
+
 	Warnings []string `json:"warnings,omitempty"`
 }
 

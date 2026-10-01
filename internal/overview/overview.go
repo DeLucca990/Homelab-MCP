@@ -8,8 +8,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/DeLucca990/homelab-mcp/internal/bazarr"
 	"github.com/DeLucca990/homelab-mcp/internal/containers"
 	"github.com/DeLucca990/homelab-mcp/internal/jellyfin"
+	"github.com/DeLucca990/homelab-mcp/internal/prowlarr"
 	"github.com/DeLucca990/homelab-mcp/internal/radarr"
 	"github.com/DeLucca990/homelab-mcp/internal/services"
 	"github.com/DeLucca990/homelab-mcp/internal/sonarr"
@@ -87,6 +89,12 @@ func Get(ctx context.Context) Report {
 	}
 	if jellyfin.Configured() {
 		checks = append(checks, checkJellyfin)
+	}
+	if bazarr.Configured() {
+		checks = append(checks, checkBazarr)
+	}
+	if prowlarr.Configured() {
+		checks = append(checks, checkProwlarr)
 	}
 
 	sections := make([]Section, len(checks))
@@ -315,6 +323,68 @@ func checkJellyfin(ctx context.Context) Section {
 	}
 
 	s.Warnings = append(fromSessions, fromHealth...)
+
+	return s.settled()
+}
+
+// checkBazarr reports whether subtitles can arrive at all. The wanted counts
+// are in the headline and not the warnings: a library always wants some
+// subtitle no provider has, and a permanent "!" is one nobody reads. What is a
+// warning is the state where nothing can be found — every provider throttled,
+// Sonarr or Radarr unreachable — which is exactly what health reports.
+func checkBazarr(ctx context.Context) Section {
+	s := Section{Name: "bazarr", Tool: "bazarr_system_health"}
+
+	h, err := bazarr.GetHealth(ctx)
+	if err != nil {
+		return s.failed(err)
+	}
+
+	s.Headline = "v" + h.Version
+	if h.Version == "" {
+		s.Headline = "version unknown"
+	}
+	s.Headline += fmt.Sprintf(", %d provider(s)", len(h.Providers))
+	if h.ThrottledCount > 0 {
+		s.Headline += fmt.Sprintf(" (%d throttled)", h.ThrottledCount)
+	}
+	s.Headline += fmt.Sprintf(", %d movie and %d episode subtitle(s) wanted",
+		h.WantedMovieCount, h.WantedEpisodeCount)
+
+	s.Warnings = h.Warnings
+
+	return s.settled()
+}
+
+// checkProwlarr reports whether the indexers the *arrs depend on are
+// answering. Prowlarr's own health checks already name backed-off indexers and
+// unreachable apps, so those are the warnings.
+func checkProwlarr(ctx context.Context) Section {
+	s := Section{Name: "prowlarr", Tool: "prowlarr_indexer_status"}
+
+	h, err := prowlarr.GetHealth(ctx)
+	if err != nil {
+		return s.failed(err)
+	}
+
+	s.Headline = "v" + h.Version
+	if h.Version == "" {
+		s.Headline = "version unknown"
+	}
+	s.Headline += fmt.Sprintf(", %d of %d indexer(s) enabled", h.EnabledIndexerCount, h.IndexerCount)
+	if h.FailingIndexerCount > 0 {
+		s.Headline += fmt.Sprintf(" (%d failing)", h.FailingIndexerCount)
+	}
+	if h.SyncLevels == nil {
+		s.Headline += ", apps unreadable"
+	} else {
+		s.Headline += fmt.Sprintf(", %d app(s)", h.ApplicationCount)
+	}
+
+	s.Warnings = h.Warnings
+	if h.FailingIndexerCount == 0 && len(h.Warnings) > 0 {
+		s.Tool = "prowlarr_system_health"
+	}
 
 	return s.settled()
 }

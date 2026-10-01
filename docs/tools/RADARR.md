@@ -1,6 +1,6 @@
 # Radarr tools
 
-Eight tools over Radarr's v3 HTTP API — four that read, four that write. None of
+Fifteen tools over Radarr's v3 HTTP API — eight that read, seven that write. None of
 them exist until the server is told where the machine is and given an API key.
 Design notes: [docs/modules/radarr.md](../modules/radarr.md).
 
@@ -9,11 +9,18 @@ Design notes: [docs/modules/radarr.md](../modules/radarr.md).
 | `radarr_library_status` | `term`, `only_missing`, `only_monitored`, `limit` | what Radarr is monitoring and what it actually has | – |
 | `radarr_queue_status` | — | the download queue with per-item progress, stalls and blocked imports | – |
 | `radarr_movie_lookup` | `term`, `limit` | searches TMDB through Radarr, returning candidates with their TMDB ids | – |
-| `radarr_system_health` | — | Radarr's version, uptime, root folders and its own failing health checks | – |
+| `radarr_system_health` | `test_download_clients` | Radarr's version, uptime, root folders, its own failing health checks and, on request, a download client test | – |
+| `radarr_releases` | `movie_id`, `limit` | an interactive search: every release found, in Radarr's order, with why each was rejected | – |
+| `radarr_import_candidates` | `queue_id` / `folder` | what Radarr makes of the files in a finished download, and its objection to each | – |
+| `radarr_history` | `movie_id`, `limit` | what was grabbed, imported, failed or deleted — and the blocklist | – |
+| `radarr_calendar` | `days`, `past_days` | cinema, digital and physical release dates | – |
 | `radarr_movie_add` | `tmdb_id`, … | adds a movie and starts searching for it | **yes** |
 | `radarr_movie_search` | `movie_id` | searches the indexers now for a movie already in the library | **yes** |
 | `radarr_movie_remove` | `movie_id`, … | removes a movie from the library, by default deleting its files | **yes** |
 | `radarr_queue_remove` | `queue_id`, … | removes one download from the queue | **yes** |
+| `radarr_release_grab` | `id` | grabs a release picked from `radarr_releases`, rejected or not | **yes** |
+| `radarr_import` | `ids`, `movie_id` | imports files picked from `radarr_import_candidates` | **yes** |
+| `radarr_movie_edit` | `movie_id`, `monitored`, `quality_profile`, `minimum_availability`, tags | changes a movie's settings | **yes** |
 
 ## Configuration
 
@@ -21,7 +28,7 @@ Design notes: [docs/modules/radarr.md](../modules/radarr.md).
 | --- | --- |
 | `SERVER_URL` | the server the services run on: `http://localhost` when this binary runs on that same machine, otherwise `http://10.0.0.4` or `https://media.example.com/radarr` |
 | `RADARR_API_KEY` | Radarr → Settings → General → Security → API Key |
-| `HOMELAB_MCP_RADARR_READONLY` | set to `1` to drop the four writes, leaving monitoring only |
+| `HOMELAB_MCP_RADARR_READONLY` | set to `1` to drop the seven writes, leaving monitoring only |
 
 Without the first two, **none of these tools are registered** — a server with no
 Radarr configured cannot be asked to reach one. Both belong on the server side,
@@ -322,3 +329,130 @@ pass to `radarr_movie_search`.
 
 Use `blocklist` for a release that is broken or keeps failing to import, not for
 one you simply do not want right now.
+
+---
+
+## `radarr_releases`
+
+| Parameter | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `movie_id` | integer | — | required |
+| `limit` | integer | `20` | max `100` |
+
+Radarr's interactive search. Where `radarr_movie_search` asks Radarr to pick and
+says nothing when it picks nothing, this lists **every** release the indexers
+returned, in the order Radarr would prefer them, with Radarr's reason for
+rejecting each one:
+
+```
+releases for Dune (2021): 14 found, 0 Radarr would take
+
+ID        #  OK  QUALITY      SIZE  SEED   AGE  INDEXER  TITLE / WHY NOT
+3f9c01ab  1  no  Bluray-2160p  62G    40   3d  Nyaa     Dune.2021.2160p.UHD… — Not an upgrade for existing movie file
+b71e22d0  2  no  WEBDL-720p   2.1G    12   9d  1337x    Dune.2021.720p… — WEBDL-720p is not wanted in profile
+
+rejected because: 9x WEBDL-720p; 5x Not an upgrade for existing movie file
+```
+
+Every release rejected is the diagnosis — the quality profile wants nothing on
+offer, a size limit, a language rule — and the rejections are summarised by
+reason. It grabs nothing, but queries every indexer and can take a minute. The
+`id` is this server's handle for Radarr's guid, valid for 30 minutes.
+
+---
+
+## `radarr_release_grab`
+
+| Parameter | Type | Meaning |
+| --- | --- | --- |
+| `id` | string | required, from `radarr_releases` |
+
+**Asks first.** Sends the release to the download client through Radarr, so it
+is tracked and imported like any other — including one Radarr rejected, which is
+the point: this is the override. The confirmation names the rejection it
+overrides, and a torrent with no seeders. If Radarr's own 30-minute copy of the
+search expired, the refusal says to search again.
+
+---
+
+## `radarr_import_candidates`
+
+| Parameter | Type | Meaning |
+| --- | --- | --- |
+| `queue_id` | integer | a download stuck on import, from `radarr_queue_status` |
+| `folder` | string | or any folder, as Radarr's container sees it |
+
+The diagnosis for the queue's **import blocked** state, where the file is on
+disk and the movie is still missing. Lists what Radarr makes of each file — the
+movie it matched, quality, release group — and its objection: *Unable to
+determine if file is a sample*, *Not an upgrade*, *Movie title mismatch*. A file
+matched to no movie is flagged. `radarr_queue_status` points here for every
+blocked import.
+
+---
+
+## `radarr_import`
+
+| Parameter | Type | Meaning |
+| --- | --- | --- |
+| `ids` | string[] | required, from `radarr_import_candidates` |
+| `movie_id` | integer | the movie to import them as — required for an unmatched file, overrides the match otherwise |
+
+Radarr's Manual Import. **Asks first**, file by file, naming the objection each
+import overrides and any existing file it replaces. It sends back exactly what
+Radarr parsed for the file — quality, languages, release group — so the movie
+gets the same metadata the dialog would give it. Import mode is Radarr's `auto`:
+a usenet download is moved, a torrent hardlinked or copied so it keeps seeding.
+
+---
+
+## `radarr_movie_edit`
+
+| Parameter | Type | Meaning |
+| --- | --- | --- |
+| `movie_id` | integer | required |
+| `monitored` | boolean | `false` stops all searching and upgrading; the file stays |
+| `quality_profile` | string | by name — e.g. to ask for 4K, or to stop upgrading |
+| `minimum_availability` | string | `announced`, `inCinemas` or `released` |
+| `add_tags`, `remove_tags` | string[] | existing tags, by label |
+
+**Asks first**, with each value before and after. Goes through Radarr's movie
+editor, which takes only the fields to change — nothing else about the movie is
+sent back. A new profile on a movie with a file warns that an upgrade may
+replace it; an availability before release warns about cam copies. Tags are
+never created here. Moving files to another root folder is not offered.
+
+---
+
+## `radarr_history`
+
+| Parameter | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `movie_id` | integer | — | one movie, with its blocklist; omitted, recent events across the library |
+| `limit` | integer | `25` | max `200` |
+
+Newest first: grabbed (from which indexer), imported, failed (with Radarr's
+reason — *Password protected archive*, *Sample*), deleted (upgrade, missing from
+disk), renamed. For one movie it adds the **blocklist** — releases Radarr will
+never grab again — and warns about a run of failures.
+
+---
+
+## `radarr_calendar`
+
+| Parameter | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `days` | integer | `14` | how far ahead, max `90` |
+| `past_days` | integer | `0` | also the recent past — what should have arrived |
+
+Cinema, digital and physical release dates of the movies in the library, each
+with whether it is already downloaded.
+
+---
+
+## Download client test
+
+`radarr_system_health` with `test_download_clients=true` has Radarr test every
+enabled download client — the answer to *"it grabs things and nothing ever
+downloads"*. Radarr answers the test with a 400 as soon as one client fails,
+and the body of that 400 is read as the result rather than treated as an error.

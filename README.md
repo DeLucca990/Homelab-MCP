@@ -1,7 +1,7 @@
 # Homelab MCP
 
 An [MCP](https://modelcontextprotocol.io) server that exposes a Linux home server
-to an AI assistant: system health, Docker containers, Radarr, Sonarr and Jellyfin.
+to an AI assistant: system health, Docker containers, Radarr, Sonarr, Prowlarr, Jellyfin and Bazarr.
 
 It is a single static Go binary that speaks MCP over **Streamable HTTP**. Run it on the machine
 you want to watch, point any MCP client on your tailnet at it, and you can ask *"is my server
@@ -9,7 +9,7 @@ running out of disk?"* — or *"why hasn't Dune downloaded?"* — instead of SSH
 
 ## Tools
 
-**30 tools — one overview and five families — and never all at once.** A default install
+**74 tools — one overview and seven families — and never all at once.** A default install
 registers 8; the rest appear only when the environment authorises them. Full specifications,
 one page per family:
 
@@ -18,9 +18,11 @@ one page per family:
 | **Overview** | one call that checks every family below and reports only what is wrong | [docs/tools/README.md](docs/tools/README.md#homelab_overview) |
 | **System** | host info, CPU, memory, disk, systemd units | [docs/tools/SYSTEM.md](docs/tools/SYSTEM.md) |
 | **Docker** | container status, logs, and — opt-in — exec and restart | [docs/tools/DOCKER.md](docs/tools/DOCKER.md) |
-| **Radarr** | library, queue, lookup, health, and four writes | [docs/tools/RADARR.md](docs/tools/RADARR.md) |
-| **Sonarr** | library, missing episodes, queue, lookup, health, and five writes | [docs/tools/SONARR.md](docs/tools/SONARR.md) |
-| **Jellyfin** | who is watching what and what it costs, and the server's own health | [docs/tools/JELLYFIN.md](docs/tools/JELLYFIN.md) |
+| **Radarr** | library, queue, lookup, health, interactive search, import, history, calendar, and seven writes | [docs/tools/RADARR.md](docs/tools/RADARR.md) |
+| **Sonarr** | library, missing episodes, queue, lookup, health, interactive search, import, history, calendar, and nine writes | [docs/tools/SONARR.md](docs/tools/SONARR.md) |
+| **Prowlarr** | indexer status and tests, app sync, direct search, and four writes | [docs/tools/PROWLARR.md](docs/tools/PROWLARR.md) |
+| **Jellyfin** | sessions, health, users, library search, activity log, and seven writes | [docs/tools/JELLYFIN.md](docs/tools/JELLYFIN.md) |
+| **Bazarr** | subtitle status, wanted list, providers, manual search, and five writes | [docs/tools/BAZARR.md](docs/tools/BAZARR.md) |
 
 What they are for, in one line each: [docs/tools/README.md](docs/tools/README.md).
 
@@ -95,10 +97,15 @@ changing any of them.
 | --- | --- | --- |
 | `HOMELAB_MCP_ALLOW_CONTAINER_NAMES` | `docker_container_exec`, `docker_container_restart` | [docs/tools/DOCKER.md](docs/tools/DOCKER.md#turning-them-on) |
 | `SERVER_URL` + `RADARR_API_KEY` | the whole Radarr family | [docs/tools/RADARR.md](docs/tools/RADARR.md#configuration) |
-| `HOMELAB_MCP_RADARR_READONLY` | drops Radarr's four writes | [docs/tools/RADARR.md](docs/tools/RADARR.md#configuration) |
+| `HOMELAB_MCP_RADARR_READONLY` | drops Radarr's seven writes | [docs/tools/RADARR.md](docs/tools/RADARR.md#configuration) |
 | `SERVER_URL` + `SONARR_API_KEY` | the whole Sonarr family | [docs/tools/SONARR.md](docs/tools/SONARR.md#configuration) |
-| `HOMELAB_MCP_SONARR_READONLY` | drops Sonarr's five writes | [docs/tools/SONARR.md](docs/tools/SONARR.md#configuration) |
-| `SERVER_URL` + `JELLYFIN_API_KEY` | both Jellyfin tools | [docs/tools/JELLYFIN.md](docs/tools/JELLYFIN.md#configuration) |
+| `HOMELAB_MCP_SONARR_READONLY` | drops Sonarr's nine writes | [docs/tools/SONARR.md](docs/tools/SONARR.md#configuration) |
+| `SERVER_URL` + `PROWLARR_API_KEY` | the whole Prowlarr family | [docs/tools/PROWLARR.md](docs/tools/PROWLARR.md#configuration) |
+| `HOMELAB_MCP_PROWLARR_READONLY` | drops Prowlarr's four writes | [docs/tools/PROWLARR.md](docs/tools/PROWLARR.md#configuration) |
+| `SERVER_URL` + `JELLYFIN_API_KEY` | the whole Jellyfin family | [docs/tools/JELLYFIN.md](docs/tools/JELLYFIN.md#configuration) |
+| `HOMELAB_MCP_JELLYFIN_READONLY` | drops Jellyfin's seven writes | [docs/tools/JELLYFIN.md](docs/tools/JELLYFIN.md#configuration) |
+| `SERVER_URL` + `BAZARR_API_KEY` | the whole Bazarr family | [docs/tools/BAZARR.md](docs/tools/BAZARR.md#configuration) |
+| `HOMELAB_MCP_BAZARR_READONLY` | drops Bazarr's five writes | [docs/tools/BAZARR.md](docs/tools/BAZARR.md#configuration) |
 | `HOMELAB_MCP_TRUST_CLIENT_CONFIRMATION` | acting on clients that cannot show a server confirmation | [below](#approving-actions) |
 | `HOMELAB_MCP_HTTP_ADDR` + `HOMELAB_MCP_HTTP_TOKEN` | **required** — the address it listens on and the token it demands | [below](#over-http-instead) |
 
@@ -113,11 +120,13 @@ SERVER_URL=http://localhost
 RADARR_API_KEY=your-radarr-key
 SONARR_API_KEY=your-sonarr-key
 JELLYFIN_API_KEY=your-jellyfin-key
+BAZARR_API_KEY=your-bazarr-key
+PROWLARR_API_KEY=your-prowlarr-key
 HOMELAB_MCP_ALLOW_CONTAINER_NAMES=jellyfin,sonarr,radarr
 ```
 
-One `SERVER_URL` serves all three services because each fills in its own port — Radarr's 7878,
-Sonarr's 8989, Jellyfin's 8096 — so keep it a bare host. Written with a port
+One `SERVER_URL` serves every service because each fills in its own port — Radarr's 7878,
+Sonarr's 8989, Prowlarr's 9696, Jellyfin's 8096, Bazarr's 6767 — so keep it a bare host. Written with a port
 (`http://nas:7878`) it can only reach one of them.
 
 `make build` and run — no wrapper, no shell. The rules:
@@ -163,7 +172,9 @@ systemd install:
 ```
 [homelab-mcp] radarr at http://localhost:7878: read and write
 [homelab-mcp] sonarr at http://localhost:8989: read and write
-[homelab-mcp] jellyfin at http://localhost:8096: read-only
+[homelab-mcp] jellyfin at http://localhost:8096: read and write
+[homelab-mcp] bazarr at http://localhost:6767: read and write
+[homelab-mcp] prowlarr at http://localhost:9696: read and write
 [homelab-mcp] MCP server running on transport streamable http at http://100.101.102.103:3000/mcp
 ```
 
@@ -182,7 +193,7 @@ service lines above against the `.env` you expected to be read.
 
 ## Approving actions
 
-Eleven tools change something, and none of them act on the first call. They describe the
+Thirty-four tools change something, and none of them act on the first call. They describe the
 operation, wait for a decision, and bind the approval to that exact operation with a
 fingerprint — so approving `ls /config` cannot execute `rm -rf /config`, approving one
 film cannot add another, and approving a search of season 3 cannot search all nine seasons.
@@ -288,7 +299,7 @@ protocol and keeping sessions are mutually exclusive, and there is no switch for
 Restarting the process invalidates nothing, since there is no session id for a client to lose.
 
 A client on an older protocol still connects, and every read-only tool answers it. What it
-cannot do is the [eleven writes](#approving-actions): it declares its capabilities once, in
+cannot do is the [thirty-four writes](#approving-actions): it declares its capabilities once, in
 `initialize`, and a sessionless server keeps nothing from that — so the server cannot tell
 whether it could be shown a confirmation, and it does not act without one. It refuses with
 `this client ("") cannot show a confirmation coming from the server`, where the empty name is
@@ -377,9 +388,9 @@ docs/ARCHITECTURE.md   the shape both of those sit in
 | --- | --- |
 | [docs/tools/README.md](docs/tools/README.md) | the tool index, the overview tool, and the conventions every tool shares |
 | [docs/tools/PROMPTS.md](docs/tools/PROMPTS.md) · [docs/tools/RESOURCES.md](docs/tools/RESOURCES.md) | the two surfaces that are not tools |
-| [docs/tools/SYSTEM.md](docs/tools/SYSTEM.md) · [docs/tools/DOCKER.md](docs/tools/DOCKER.md) · [docs/tools/RADARR.md](docs/tools/RADARR.md) · [docs/tools/SONARR.md](docs/tools/SONARR.md) · [docs/tools/JELLYFIN.md](docs/tools/JELLYFIN.md) | per-family reference |
+| [docs/tools/SYSTEM.md](docs/tools/SYSTEM.md) · [docs/tools/DOCKER.md](docs/tools/DOCKER.md) · [docs/tools/RADARR.md](docs/tools/RADARR.md) · [docs/tools/SONARR.md](docs/tools/SONARR.md) · [docs/tools/JELLYFIN.md](docs/tools/JELLYFIN.md) · [docs/tools/BAZARR.md](docs/tools/BAZARR.md) · [docs/tools/PROWLARR.md](docs/tools/PROWLARR.md) | per-family reference |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | layering, tool registration, the confirmation round trip, the fingerprint |
-| [docs/modules/](docs/modules/) | one page per integration: [system](docs/modules/system.md), [docker](docs/modules/docker.md), [radarr](docs/modules/radarr.md), [sonarr](docs/modules/sonarr.md), [jellyfin](docs/modules/jellyfin.md) |
+| [docs/modules/](docs/modules/) | one page per integration: [system](docs/modules/system.md), [docker](docs/modules/docker.md), [radarr](docs/modules/radarr.md), [sonarr](docs/modules/sonarr.md), [jellyfin](docs/modules/jellyfin.md), [bazarr](docs/modules/bazarr.md), [prowlarr](docs/modules/prowlarr.md) |
 
 ## Project layout
 
@@ -395,6 +406,8 @@ internal/containers/ docker, over the Engine API on the unix socket
 internal/radarr/     radarr, over its v3 HTTP API
 internal/sonarr/     sonarr, over its v3 HTTP API
 internal/jellyfin/   jellyfin, over its HTTP API
+internal/bazarr/     bazarr, over its HTTP API
+internal/prowlarr/   prowlarr, over its v1 HTTP API
 ```
 
 The split is deliberate: the collectors know nothing about MCP, so they stay testable and
@@ -409,14 +422,34 @@ covers the Radarr client against a mock Radarr — URL normalisation, queue clas
 missing versus unreleased, id resolution and every refusal the add path makes — and the same
 for Sonarr, plus what is only true there: episode counting, season packs sharing one
 download, and the three search scopes hashing apart so an approval for one season cannot run
-against a whole series.
+against a whole series. The interactive search, manual import and editor tools
+are covered on both: Radarr's and Sonarr's own release order kept, a guid of any length handed
+back byte for byte behind an 8-character id, an import that sends back the quality and languages
+the *arr parsed, an edit that sends only the named fields, and the 400 that testall answers with
+read as the result it is.
 
 The Jellyfin client is covered the same way, against a mock Jellyfin: the authorization header
 it sends — which is the one thing it cannot borrow from the `*arr` clients, and a regression
 there would look exactly like an expired key — the tick and timestamp conversions, the
 four-way split of what a stream actually costs, a stale session told apart from a paused one,
 and a health call that degrades into warnings rather than failing when the key turns out not
-to be an administrator key.
+to be an administrator key. Its writes are covered against a second mock that records every
+request: a user's preferences and policy sent back whole with only the named fields changed,
+every spelling of Brazilian Portuguese landing on `por`, the pre-10.9 routes tried when the
+current ones 404, and a stale stream stopped by ending its transcode rather than by a command
+its absent app would never receive.
+
+The Bazarr client has its own mock Bazarr: every spelling of Brazilian Portuguese landing on
+Bazarr's invented `pb` rather than the European `pt`, a throttled provider told apart from an
+unused `*arr`, a search that has not landed yet reported as pending rather than found or
+failed, a manual-search token of kilobytes handed back byte for byte behind an 8-character
+id, and the shift syntax Bazarr's own UI sends.
+
+The Prowlarr client is covered against a mock Prowlarr: a backoff that has run out told
+apart from a failing indexer, Prowlarr's tag rule for which app receives what, the 400 that
+`testall` answers with read as the result it is, an edit that sends only the fields named, a
+search that never returns the download link carrying Prowlarr's key, and an add whose
+credentials are masked in the confirmation and sent byte for byte.
 
 It also covers the surfaces added around those: the overview, including that a service being
 down does not withhold the checks that worked, and — over the SDK's in-memory transport, so

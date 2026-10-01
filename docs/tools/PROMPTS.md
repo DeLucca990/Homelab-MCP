@@ -62,6 +62,12 @@ state on their own:
   there is no log file inside the container to go looking for
 - radarr / sonarr — health before queue: every indexer refusing to answer looks
   exactly like there being nothing to download
+- prowlarr — enabled is not working: an indexer failing every query this week
+  is still listed in Radarr and Sonarr, and the failing column and 7-day
+  numbers are what show it
+- bazarr — the provider table: with every provider throttled Bazarr is up,
+  healthy and searching nothing, and an `unknown` Sonarr or Radarr version means
+  it is working from a stale copy of that library
 
 It ends by telling the model to change nothing, and to report in one line if
 nothing is wrong instead of narrating every check that passed.
@@ -96,13 +102,27 @@ two are indistinguishable from the outside:
 3. Health (radarr_system_health / sonarr_system_health) — if the queue is empty. This is the
    answer to "nothing was found": the service can be up, healthy and idle while
    every indexer it has is refusing to answer or its download client is
-   unreachable, and it records exactly that here.
+   unreachable, and it records exactly that here. test_download_clients=true
+   checks the client too.
+
+   If health is clean, ask the indexers yourself (radarr_releases / sonarr_releases):
+   every release they return is listed with the reason it was rejected, which
+   is usually the whole answer — a quality profile that wants nothing on offer,
+   a size limit, a language rule. A download stuck on import is the other
+   case: radarr_import_candidates / sonarr_import_candidates shows the files and the objection.
 
 4. For a series, sonarr_missing_episodes — which episodes are actually owed,
    when they aired, and whether anything has ever searched for them.
 ```
 
-Step 4 appears only where Sonarr is configured.
+Step 4 appears only where Sonarr is configured. Where Prowlarr is, step 3 gains
+a paragraph sending the model there next: `prowlarr_indexer_status` for which
+indexers are failing, `prowlarr_search` for whether any release exists at all,
+and `prowlarr_applications` for an indexer that works in Prowlarr and never
+reached the *arr. Where Jellyfin is, the same step covers the download that
+arrived and still cannot be watched: `jellyfin_find_item` for whether Jellyfin
+has it, and `homelab://jellyfin/libraries` for whether it landed in a folder
+Jellyfin reads.
 
 It closes by asking for the diagnosis before the fix. Every tool that would act
 here asks for confirmation anyway; the point is to not spend that approval on a

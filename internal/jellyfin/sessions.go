@@ -239,8 +239,10 @@ func becauseOf(reasons []string) string {
 	return " (" + strings.Join(reasons, ", ") + ")"
 }
 
-// who names a session the way a person would: the viewer, and the device when
+// Who names a session the way a person would: the viewer, and the device when
 // one user is watching on two of them.
+func (s Session) Who() string { return s.who() }
+
 func (s Session) who() string {
 	switch {
 	case s.User != "" && s.Device != "":
@@ -263,6 +265,9 @@ type sessionJSON struct {
 	DeviceName         string `json:"DeviceName"`
 	ApplicationVersion string `json:"ApplicationVersion"`
 	RemoteEndPoint     string `json:"RemoteEndPoint"`
+	DeviceID           string `json:"DeviceId"`
+
+	SupportsRemoteControl bool `json:"SupportsRemoteControl"`
 
 	LastActivityDate    string `json:"LastActivityDate"`
 	LastPlaybackCheckIn string `json:"LastPlaybackCheckIn"`
@@ -282,6 +287,7 @@ type sessionJSON struct {
 		PositionTicks int64  `json:"PositionTicks"`
 		IsPaused      bool   `json:"IsPaused"`
 		PlayMethod    string `json:"PlayMethod"`
+		PlaySessionID string `json:"PlaySessionId"`
 	} `json:"PlayState"`
 
 	TranscodingInfo *struct {

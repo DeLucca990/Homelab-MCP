@@ -204,8 +204,9 @@ func queueWarnings(items []QueueItem) []string {
 		case i.TrackedState == "importBlocked":
 			out = append(out, fmt.Sprintf(
 				"%s finished downloading but Sonarr could not import it%s — "+
-					"the file is on disk and the episode is still missing from the library",
-				name, reason(i)))
+					"the file is on disk and the episode is still missing from the library; "+
+					"sonarr_import_candidates with queue_id %d shows the files and why",
+				name, reason(i), i.ID))
 
 		case i.TrackedState == "importPending":
 			out = append(out, fmt.Sprintf(

@@ -46,6 +46,9 @@ type Movie struct {
 	AddedSecondsAgo          uint64 `json:"added_seconds_ago,omitempty"`
 	LastSearchSecondsAgo     uint64 `json:"last_search_seconds_ago,omitempty" jsonschema:"when Radarr last looked for this movie; absent means it never has"`
 	DigitalReleaseSecondsAgo uint64 `json:"digital_release_seconds_ago,omitempty"`
+
+	// the raw tag ids, for an edit that adds or removes one
+	tagIDs []int
 }
 
 type Library struct {
@@ -227,6 +230,7 @@ type movieJSON struct {
 	IsAvailable         bool   `json:"isAvailable"`
 	MinimumAvailability string `json:"minimumAvailability"`
 	QualityProfileID    int    `json:"qualityProfileId"`
+	Tags                []int  `json:"tags"`
 
 	Path           string `json:"path"`
 	SizeOnDisk     int64  `json:"sizeOnDisk"`
@@ -259,6 +263,7 @@ func (r movieJSON) toMovie() Movie {
 		AddedSecondsAgo:          secondsSince(r.Added),
 		LastSearchSecondsAgo:     secondsSince(r.LastSearchTime),
 		DigitalReleaseSecondsAgo: secondsSince(r.DigitalRelease),
+		tagIDs:                   r.Tags,
 	}
 	if r.SizeOnDisk > 0 {
 		m.SizeBytes = uint64(r.SizeOnDisk)

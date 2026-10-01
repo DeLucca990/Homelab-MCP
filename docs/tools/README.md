@@ -9,14 +9,16 @@ they are built the way they are, see [`docs/modules/`](../modules/) and
 | Overview | 1, read-only, spans every family | [below](#homelab_overview) |
 | System | 5, all read-only | [SYSTEM.md](SYSTEM.md) |
 | Docker | 4 — 2 read-only, 2 opt-in actions | [DOCKER.md](DOCKER.md) |
-| Radarr | 8 — 4 read-only, 4 writes | [RADARR.md](RADARR.md) |
-| Sonarr | 10 — 5 read-only, 5 writes | [SONARR.md](SONARR.md) |
-| Jellyfin | 2, both read-only | [JELLYFIN.md](JELLYFIN.md) |
+| Radarr | 15 — 8 read-only, 7 writes | [RADARR.md](RADARR.md) |
+| Sonarr | 18 — 9 read-only, 9 writes | [SONARR.md](SONARR.md) |
+| Jellyfin | 12 — 5 read-only, 7 writes | [JELLYFIN.md](JELLYFIN.md) |
+| Bazarr | 9 — 4 read-only, 5 writes | [BAZARR.md](BAZARR.md) |
+| Prowlarr | 10 — 6 read-only, 4 writes | [PROWLARR.md](PROWLARR.md) |
 
-**30 tools in total, but never all at once.** A default install registers
+**74 tools in total, but never all at once.** A default install registers
 **8**: the overview, the five system tools and the two read-only Docker ones.
 The rest appear only when the environment says so — the Docker actions need an
-allowlist, and the Radarr, Sonarr and Jellyfin families each need a URL and an
+allowlist, and the Radarr, Sonarr, Prowlarr, Jellyfin and Bazarr families each need a URL and an
 API key. A tool that is not registered does not appear in `tools/list`, so it
 cannot be called by mistake.
 
@@ -115,7 +117,7 @@ containers, the download queue, the movie library, the series library — is
 sorted by severity rather than by name, so the reason someone is looking is at
 the top.
 
-**Writes ask first.** The eleven tools that change something never act on the
+**Writes ask first.** The thirty-four tools that change something never act on the
 first call. They describe the operation, wait for a human decision, and bind the
 approval to the exact operation with a fingerprint. See
 [docs/ARCHITECTURE.md §3](../ARCHITECTURE.md#3-waiting-for-a-user-response).
@@ -128,11 +130,34 @@ approval to the exact operation with a fingerprint. See
 | `radarr_movie_search` | Radarr | confirmation |
 | `radarr_movie_remove` | Radarr | confirmation |
 | `radarr_queue_remove` | Radarr | confirmation |
+| `radarr_release_grab` | Radarr | confirmation |
+| `radarr_import` | Radarr | confirmation |
+| `radarr_movie_edit` | Radarr | confirmation |
 | `sonarr_series_add` | Sonarr | confirmation |
 | `sonarr_season_monitor` | Sonarr | confirmation |
 | `sonarr_series_search` | Sonarr | confirmation |
 | `sonarr_series_remove` | Sonarr | confirmation |
 | `sonarr_queue_remove` | Sonarr | confirmation |
+| `sonarr_release_grab` | Sonarr | confirmation |
+| `sonarr_import` | Sonarr | confirmation |
+| `sonarr_series_edit` | Sonarr | confirmation |
+| `sonarr_episode_monitor` | Sonarr | confirmation |
+| `bazarr_subtitle_search` | Bazarr | confirmation |
+| `bazarr_subtitle_download` | Bazarr | confirmation |
+| `bazarr_subtitle_sync` | Bazarr | confirmation |
+| `bazarr_language_profile_set` | Bazarr | confirmation |
+| `bazarr_providers_reset` | Bazarr | confirmation |
+| `prowlarr_indexer_update` | Prowlarr | confirmation |
+| `prowlarr_indexer_add` | Prowlarr | confirmation |
+| `prowlarr_indexer_remove` | Prowlarr | confirmation |
+| `prowlarr_apps_sync` | Prowlarr | confirmation |
+| `jellyfin_library_scan` | Jellyfin | confirmation |
+| `jellyfin_session_stop` | Jellyfin | confirmation |
+| `jellyfin_session_message` | Jellyfin | confirmation |
+| `jellyfin_user_preferences_set` | Jellyfin | confirmation |
+| `jellyfin_user_access_set` | Jellyfin | confirmation |
+| `jellyfin_transcoding_set` | Jellyfin | confirmation |
+| `jellyfin_mark_played` | Jellyfin | confirmation |
 
 **A confirmation states the size, not just the name.** Where an operation's
 arguments hide how much it does — `sonarr_series_add` with `monitor: all` is a

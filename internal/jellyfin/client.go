@@ -1,6 +1,7 @@
 package jellyfin
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -30,6 +31,21 @@ var ErrNotConfigured = errors.New("jellyfin is not configured on this server")
 var ErrUnreachable = errors.New("jellyfin is not reachable")
 
 var ErrForbidden = errors.New("jellyfin refused the API key for an admin-only endpoint")
+
+// ErrNotFound means Jellyfin answered, and has no such thing — an id that is
+// gone, or a route an older server does not have.
+var ErrNotFound = errors.New("not found")
+
+const ReadOnlyEnv = "HOMELAB_MCP_JELLYFIN_READONLY"
+
+// ReadOnly reports whether the operator asked for monitoring without actions.
+func ReadOnly() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(ReadOnlyEnv))) {
+	case "1", "true", "yes":
+		return true
+	}
+	return false
+}
 
 func Configured() bool {
 	return os.Getenv(BaseURLEnv) != "" && os.Getenv(APIKeyEnv) != ""
@@ -91,6 +107,16 @@ func newClient() (*client, error) {
 }
 
 func (c *client) get(ctx context.Context, path string, query url.Values, out any) error {
+	return c.do(ctx, http.MethodGet, path, query, nil, out)
+}
+
+// send is every write: a POST or DELETE with an optional JSON body. Jellyfin
+// answers nearly all of them with 204 and nothing to decode.
+func (c *client) send(ctx context.Context, method, path string, query url.Values, body any) error {
+	return c.do(ctx, method, path, query, body, nil)
+}
+
+func (c *client) do(ctx context.Context, method, path string, query url.Values, body, out any) error {
 	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
 	defer cancel()
 
@@ -99,7 +125,16 @@ func (c *client) get(ctx context.Context, path string, query url.Values, out any
 		target += "?" + query.Encode()
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	var payload io.Reader
+	if body != nil {
+		encoded, err := json.Marshal(body)
+		if err != nil {
+			return err
+		}
+		payload = bytes.NewReader(encoded)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, target, payload)
 	if err != nil {
 		return err
 	}
@@ -108,6 +143,9 @@ func (c *client) get(ctx context.Context, path string, query url.Values, out any
 		`MediaBrowser Client=%q, Device=%q, DeviceId=%q, Version=%q, Token=%q`,
 		clientName, clientName, "homelab-mcp", clientVersion, c.key))
 	req.Header.Set("Accept", "application/json")
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
 
 	resp, err := c.http.Do(req)
 	if err != nil {
@@ -119,21 +157,23 @@ func (c *client) get(ctx context.Context, path string, query url.Values, out any
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 300 {
-		return c.apiError(resp, path)
+		return c.apiError(resp, method, path)
 	}
 	if out == nil {
 		return nil
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
-		return fmt.Errorf("jellyfin answered GET %s with something that is not JSON — "+
-			"is %s really a Jellyfin? (%w)", path, c.base, err)
+		return fmt.Errorf("jellyfin answered %s %s with something that is not JSON — "+
+			"is %s really a Jellyfin? (%w)", method, path, c.base, err)
 	}
 	return nil
 }
 
-func (c *client) apiError(resp *http.Response, path string) error {
+func (c *client) apiError(resp *http.Response, method, path string) error {
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 8192))
+	html := strings.Contains(resp.Header.Get("Content-Type"), "html")
+	message := jellyfinMessage(raw)
 
 	switch resp.StatusCode {
 	case http.StatusUnauthorized:
@@ -141,18 +181,27 @@ func (c *client) apiError(resp *http.Response, path string) error {
 			"Dashboard → API Keys", resp.Status, APIKeyEnv)
 
 	case http.StatusForbidden:
-		return fmt.Errorf("%w: GET %s needs an administrator key, and this one was "+
+		// A refusal with a reason is Jellyfin's own rule speaking — "Administrators
+		// cannot be disabled" — not a key without rights.
+		if message != "" && !html {
+			return fmt.Errorf("%w: jellyfin refused %s %s: %s", ErrForbidden, method, path, message)
+		}
+		return fmt.Errorf("%w: %s %s needs an administrator key, and this one was "+
 			"accepted but not allowed. Keys issued from Dashboard → API Keys have those "+
-			"rights; a key taken from a user session does not", ErrForbidden, path)
+			"rights; a key taken from a user session does not", ErrForbidden, method, path)
 
 	case http.StatusNotFound:
-		if strings.Contains(resp.Header.Get("Content-Type"), "html") {
+		if html {
 			return fmt.Errorf("no Jellyfin API at %s — the host answered with a web page, "+
 				"so %s is probably pointing at the wrong port or is missing the base url",
 				c.base+path, BaseURLEnv)
 		}
+		return fmt.Errorf("%w: jellyfin has nothing at %s %s", ErrNotFound, method, path)
 	}
 
+	if message != "" {
+		return fmt.Errorf("jellyfin refused %s %s (%s): %s", method, path, resp.Status, message)
+	}
 	body := strings.TrimSpace(string(raw))
 	if body != "" {
 		if len(body) > 200 {
@@ -160,7 +209,28 @@ func (c *client) apiError(resp *http.Response, path string) error {
 		}
 		body = ": " + body
 	}
-	return fmt.Errorf("jellyfin returned %s for GET %s%s", resp.Status, path, body)
+	return fmt.Errorf("jellyfin returned %s for %s %s%s", resp.Status, method, path, body)
+}
+
+// jellyfinMessage reads the reason out of a refusal: a bare JSON string, a
+// problem-details object, or plain text.
+func jellyfinMessage(raw []byte) string {
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		return strings.TrimSpace(s)
+	}
+	var problem struct {
+		Title  string `json:"title"`
+		Detail string `json:"detail"`
+	}
+	if err := json.Unmarshal(raw, &problem); err == nil {
+		return strings.TrimSpace(nonEmpty(problem.Detail, problem.Title))
+	}
+	text := strings.TrimSpace(string(raw))
+	if text != "" && len(text) < 200 && !strings.ContainsAny(text, "<{[") {
+		return text
+	}
+	return ""
 }
 
 // --- shared decoding helpers ---------------------------------------------

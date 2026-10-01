@@ -40,6 +40,7 @@ type QueueItem struct {
 
 	Protocol       string `json:"protocol,omitempty" jsonschema:"usenet or torrent"`
 	DownloadClient string `json:"download_client,omitempty"`
+	DownloadID     string `json:"download_id,omitempty" jsonschema:"the download client's own id for this download"`
 	Indexer        string `json:"indexer,omitempty"`
 
 	Stalled bool `json:"stalled,omitempty" jsonschema:"true when the item is downloading, bytes are still missing, and the client reports no time remaining"`
@@ -159,8 +160,9 @@ func queueWarnings(items []QueueItem) []string {
 		case i.TrackedState == "importBlocked":
 			out = append(out, fmt.Sprintf(
 				"%s finished downloading but Radarr could not import it%s — "+
-					"the file is on disk and the movie is still missing from the library",
-				name, reason(i)))
+					"the file is on disk and the movie is still missing from the library; "+
+					"radarr_import_candidates with queue_id %d shows the files and why",
+				name, reason(i), i.ID))
 
 		case i.TrackedState == "importPending":
 			out = append(out, fmt.Sprintf(
@@ -352,6 +354,7 @@ type queueRecordJSON struct {
 
 	Protocol       string `json:"protocol"`
 	DownloadClient string `json:"downloadClient"`
+	DownloadID     string `json:"downloadId"`
 	Indexer        string `json:"indexer"`
 
 	ErrorMessage   string `json:"errorMessage"`
@@ -370,6 +373,7 @@ func (r queueRecordJSON) toItem() QueueItem {
 		TrackedStatus:   r.TrackedDownloadStatus,
 		Protocol:        r.Protocol,
 		DownloadClient:  r.DownloadClient,
+		DownloadID:      r.DownloadID,
 		Indexer:         r.Indexer,
 		ErrorMessage:    r.ErrorMessage,
 		SizeBytes:       nonNegative(r.Size),

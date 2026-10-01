@@ -17,14 +17,34 @@ import (
 // indexer it has is refusing to answer, which is the state where nothing is
 // downloading and nothing looks wrong. Read-only.
 
+type radarrHealthInput struct {
+	TestDownloadClients bool `json:"test_download_clients,omitempty" jsonschema:"also have Radarr test its connection to every enabled download client — the answer to 'it grabs things and nothing ever downloads'. Changes nothing"`
+}
+
 func handleRadarrHealth(
 	ctx context.Context,
 	req *sdk.CallToolRequest,
-	_ emptyInput,
+	in radarrHealthInput,
 ) (*sdk.CallToolResult, radarr.Health, error) {
 	h, err := radarr.GetHealth(ctx)
 	if err != nil {
 		return nil, radarr.Health{}, err
+	}
+	if in.TestDownloadClients {
+		tests, err := radarr.TestDownloadClients(ctx)
+		if err != nil {
+			h.Warnings = append(h.Warnings, "could not test the download clients: "+err.Error())
+		}
+		h.DownloadClients = tests
+		if err == nil && len(tests) == 0 {
+			h.Warnings = append(h.Warnings, "radarr has no enabled download client, so nothing it grabs goes anywhere")
+		}
+		for _, t := range tests {
+			if !t.Passed {
+				h.Warnings = append(h.Warnings, fmt.Sprintf("download client %s failed its test: %s — "+
+					"grabs sent to it go nowhere", t.Name, strings.Join(t.Errors, "; ")))
+			}
+		}
 	}
 	return &sdk.CallToolResult{
 		Content: []sdk.Content{
@@ -56,6 +76,20 @@ func renderRadarrHealth(h radarr.Health) string {
 	}
 
 	fmt.Fprintf(&b, "queue: %d item(s)\n", h.QueueCount)
+
+	if len(h.DownloadClients) > 0 {
+		b.WriteString("\n")
+		cols := []column{{"DOWNLOAD CLIENT", alignLeft}, {"TEST", alignLeft}, {"ERROR", alignLeft}}
+		rows := make([][]string, 0, len(h.DownloadClients))
+		for _, t := range h.DownloadClients {
+			result := "passed"
+			if !t.Passed {
+				result = "FAILED"
+			}
+			rows = append(rows, []string{t.Name, result, strings.Join(t.Errors, "; ")})
+		}
+		b.WriteString(table(cols, rows))
+	}
 
 	if len(h.RootFolders) > 0 {
 		b.WriteString("\n")

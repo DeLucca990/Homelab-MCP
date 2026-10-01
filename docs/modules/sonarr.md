@@ -283,3 +283,24 @@ natural shape is an `internal/arr` holding the client, the error mapping and the
 decoding helpers, parameterised by service name, port and key variable — leaving
 each module with only what is actually about films or episodes. Two copies is a
 fair price; three is not.
+
+---
+
+## Acting on the diagnosis
+
+The interactive search, manual import, editor, history and calendar tools share
+their design with the Radarr module's
+([acting on the diagnosis](radarr.md#acting-on-the-diagnosis)): short ids for
+guids, the *arr's own release order kept, edits through the editor, and the
+parse sent back on import. What is specific to Sonarr:
+
+- **A search is for an episode or a season,** because that is how Sonarr's
+  `/release` is scoped; a season search includes packs, and each result says
+  what it covers.
+- **A file with no episode match is not importable here.** Which episode it is,
+  is the judgement Sonarr could not make; guessing would put the wrong file
+  behind an episode.
+- **Episode monitoring has its own endpoint** (`PUT /episode/monitor`) and is
+  limited to one series per call.
+- **The blocklist is filtered here as well as by Sonarr,** because older v4
+  releases ignore the `seriesIds` filter and would list every show's entries.

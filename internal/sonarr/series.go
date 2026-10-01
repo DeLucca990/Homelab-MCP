@@ -68,6 +68,9 @@ type Series struct {
 	PreviousAiredSecondsAgo uint64 `json:"previous_aired_seconds_ago,omitempty"`
 
 	Seasons []Season `json:"seasons,omitempty" jsonschema:"per-season breakdown, included only when the filter selects one series"`
+
+	// the raw tag ids, for an edit that adds or removes one
+	tagIDs []int
 }
 
 type Library struct {
@@ -354,6 +357,7 @@ type seriesJSON struct {
 	QualityProfileID int    `json:"qualityProfileId"`
 	SeasonFolder     bool   `json:"seasonFolder"`
 	SeriesType       string `json:"seriesType"`
+	Tags             []int  `json:"tags"`
 
 	Added         string `json:"added"`
 	NextAiring    string `json:"nextAiring"`
@@ -378,6 +382,7 @@ func (r seriesJSON) toSeries() Series {
 		AddedSecondsAgo:         secondsSince(r.Added),
 		NextAiringInSeconds:     secondsUntil(r.NextAiring),
 		PreviousAiredSecondsAgo: secondsSince(r.PreviousAired),
+		tagIDs:                  r.Tags,
 	}
 
 	if st := r.Statistics; st != nil {
