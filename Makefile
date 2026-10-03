@@ -5,13 +5,17 @@ READONLY_ENV := HOMELAB_MCP_RADARR_READONLY=1 HOMELAB_MCP_SONARR_READONLY=1 \
 	HOMELAB_MCP_PROWLARR_READONLY=1 HOMELAB_MCP_BAZARR_READONLY=1 \
 	HOMELAB_MCP_JELLYFIN_READONLY=1
 
-.PHONY: build deploy dev inspect inspect-open
+.PHONY: build deploy deploy-bot dev inspect inspect-open
 
 build:
 	go build -o bin/server ./cmd/server
+	go build -o bin/telegram-bot ./cmd/telegram-bot
 
 deploy: build
 	sudo systemctl restart homelab-mcp
+
+deploy-bot: build
+	sudo systemctl restart homelab-telegram-bot
 
 dev: build
 	HOMELAB_MCP_ALLOW_CONTAINER_NAMES= $(if $(WRITE),,$(READONLY_ENV)) ./bin/server
