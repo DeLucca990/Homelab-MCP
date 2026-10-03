@@ -108,6 +108,7 @@ changing any of them.
 | `HOMELAB_MCP_BAZARR_READONLY` | drops Bazarr's five writes | [docs/tools/BAZARR.md](docs/tools/BAZARR.md#configuration) |
 | `HOMELAB_MCP_TRUST_CLIENT_CONFIRMATION` | acting on clients that cannot show a server confirmation | [below](#approving-actions) |
 | `HOMELAB_MCP_HTTP_ADDR` + `HOMELAB_MCP_HTTP_TOKEN` | **required** — the address it listens on and the token it demands | [below](#over-http-instead) |
+| `TELEGRAM_BOT_TOKEN` + `TELEGRAM_ALLOWED_USER_IDS` | the Telegram bot, a separate binary — read by it, not by the server | [docs/modules/telegram.md](docs/modules/telegram.md#2-the-env) |
 
 ### A `.env` file
 
@@ -215,6 +216,24 @@ every case.
 
 The mechanism, and what the fingerprint does and does not protect:
 [docs/ARCHITECTURE.md §3](docs/ARCHITECTURE.md#3-waiting-for-a-user-response).
+
+## On Telegram
+
+`bin/telegram-bot` is a second binary that puts the server in a Telegram chat: `/status`,
+`/disk`, `/docker`, `/queue` call their tool directly, and anything else — *"why hasn't Dune
+downloaded?"* — goes to Claude with every tool the server registered. It is an MCP client like
+any other, so approvals still come from the server, per command: they arrive as a message with
+**Aprovar** / **Recusar** buttons. Long polling, so it needs no inbound port.
+
+```sh
+# added to the same .env
+TELEGRAM_BOT_TOKEN=123456:ABC...      # from @BotFather
+TELEGRAM_ALLOWED_USER_IDS=11111111    # numeric ids; everyone else is ignored
+ANTHROPIC_API_KEY=sk-ant-...          # optional: without it, commands only
+```
+
+Setup, systemd unit, and how the approval buttons are bound to the person who asked:
+[docs/modules/telegram.md](docs/modules/telegram.md).
 
 ## Running it
 
@@ -390,12 +409,13 @@ docs/ARCHITECTURE.md   the shape both of those sit in
 | [docs/tools/PROMPTS.md](docs/tools/PROMPTS.md) · [docs/tools/RESOURCES.md](docs/tools/RESOURCES.md) | the two surfaces that are not tools |
 | [docs/tools/SYSTEM.md](docs/tools/SYSTEM.md) · [docs/tools/DOCKER.md](docs/tools/DOCKER.md) · [docs/tools/RADARR.md](docs/tools/RADARR.md) · [docs/tools/SONARR.md](docs/tools/SONARR.md) · [docs/tools/JELLYFIN.md](docs/tools/JELLYFIN.md) · [docs/tools/BAZARR.md](docs/tools/BAZARR.md) · [docs/tools/PROWLARR.md](docs/tools/PROWLARR.md) | per-family reference |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | layering, tool registration, the confirmation round trip, the fingerprint |
-| [docs/modules/](docs/modules/) | one page per integration: [system](docs/modules/system.md), [docker](docs/modules/docker.md), [radarr](docs/modules/radarr.md), [sonarr](docs/modules/sonarr.md), [jellyfin](docs/modules/jellyfin.md), [bazarr](docs/modules/bazarr.md), [prowlarr](docs/modules/prowlarr.md) |
+| [docs/modules/](docs/modules/) | one page per integration: [system](docs/modules/system.md), [docker](docs/modules/docker.md), [radarr](docs/modules/radarr.md), [sonarr](docs/modules/sonarr.md), [jellyfin](docs/modules/jellyfin.md), [bazarr](docs/modules/bazarr.md), [prowlarr](docs/modules/prowlarr.md), [telegram](docs/modules/telegram.md) |
 
 ## Project layout
 
 ```
 cmd/server/          entrypoint: .env loading, signal handling, serving
+cmd/telegram-bot/    entrypoint for the Telegram bot
 internal/dotenv/     reads a .env into the environment before anything is registered
 internal/mcp/        MCP layer — tool registration, schemas, text rendering, confirmation,
                      prompts, resources, and the HTTP transport with its bearer auth
@@ -408,6 +428,7 @@ internal/sonarr/     sonarr, over its v3 HTTP API
 internal/jellyfin/   jellyfin, over its HTTP API
 internal/bazarr/     bazarr, over its HTTP API
 internal/prowlarr/   prowlarr, over its v1 HTTP API
+internal/telegram/   the Telegram bot — an MCP client of the server, with Claude for plain words
 ```
 
 The split is deliberate: the collectors know nothing about MCP, so they stay testable and

@@ -38,7 +38,14 @@ internal/sonarr/          sonarr                             (v3 HTTP API)
 internal/jellyfin/        jellyfin                           (HTTP API)
 internal/prowlarr/        prowlarr                           (v1 HTTP API)
 internal/bazarr/          bazarr                             (HTTP API, form-encoded writes)
+
+cmd/telegram-bot/main.go  the Telegram bot's entrypoint
+internal/telegram/        an MCP client of the server above  (go-sdk client, Claude API, Telegram)
 ```
+
+The bot is outside the layering on purpose: it imports nothing from
+`internal/mcp` or the collectors, and reaches them only over HTTP, through the
+same token and confirmations as any client ([modules/telegram.md](modules/telegram.md)).
 
 One rule holds the layering together: **`internal/mcp` never touches the OS, and
 the collectors never know MCP exists.** The collectors return plain structs; the
@@ -595,3 +602,6 @@ silent. Silent truncation reads as a complete answer.
 | Change what is resolved before an add is approved | `radarr.Plan` / `sonarr.Plan` in the module's `add.go` |
 | Change how much a Sonarr search covers | `sonarr.ResolveSearch` in `internal/sonarr/search.go` |
 | Change where configuration is read from | `internal/dotenv/` |
+| Add a Telegram command | `toolCommands` in `internal/telegram/commands.go` |
+| Change how an approval looks or who may answer it | `internal/telegram/approvals.go` |
+| Change the bot's model, system prompt or history limits | `internal/telegram/agent.go` |
