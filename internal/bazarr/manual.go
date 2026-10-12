@@ -50,7 +50,7 @@ type Candidate struct {
 	Provider string `json:"provider"`
 	SubtitleLanguage
 
-	Score       int      `json:"score" jsonschema:"Bazarr's match score as a percentage of the best possible; the automatic search only takes one at or above the configured minimum"`
+	Score       int      `json:"score" jsonschema:"Bazarr's match score as a percentage of the best possible — the higher, the better the subtitle fits the file, and the highest is the one to download unless the user picks another; the automatic search only takes one at or above the configured minimum"`
 	Matches     []string `json:"matches,omitempty" jsonschema:"what this subtitle matched about the file — hash is the only one that guarantees sync; release_group, source and resolution make it likely"`
 	DontMatches []string `json:"dont_matches,omitempty"`
 	ReleaseInfo []string `json:"release_info,omitempty" jsonschema:"the release names the subtitle was made for, as the provider lists them"`
@@ -68,7 +68,7 @@ type Candidates struct {
 
 	Profile string `json:"profile" jsonschema:"the language profile the search was limited to"`
 
-	Candidates []Candidate `json:"candidates"`
+	Candidates []Candidate `json:"candidates" jsonschema:"highest score first — the first one is the pick unless the user asks for another"`
 
 	TotalCount int `json:"total_count" jsonschema:"results before the language filter and the limit"`
 	ShownCount int `json:"shown_count"`
@@ -239,6 +239,8 @@ func GetCandidates(ctx context.Context, t Target, language string, limit int) (C
 	out.TotalCount = len(raw.Data)
 	scope := fmt.Sprintf("%s:%d:%d", out.Kind, out.RadarrID, out.EpisodeID)
 
+	slices.SortStableFunc(raw.Data, func(a, b candidateJSON) int { return b.Score - a.Score })
+
 	for _, r := range raw.Data {
 		lang := SubtitleLanguage{Code2: r.Language, Name: r.Language,
 			Forced: bool(r.Forced), HI: bool(r.HearingImpaired)}
@@ -290,7 +292,8 @@ func GetCandidates(ctx context.Context, t Target, language string, limit int) (C
 		return slices.Contains(c.Matches, "hash")
 	}):
 		out.Warnings = append(out.Warnings, "no candidate matches the file by hash, so none is "+
-			"guaranteed to be in sync — prefer one whose matches include release_group")
+			"guaranteed to be in sync — the highest score is still the best bet, and "+
+			"bazarr_subtitle_sync aligns it to the audio if it turns out to be off")
 	}
 	if out.ShownCount > 0 {
 		out.Warnings = append(out.Warnings, fmt.Sprintf(

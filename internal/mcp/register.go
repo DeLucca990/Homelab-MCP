@@ -993,12 +993,14 @@ func registerBazarrTools(s *sdk.Server) {
 			OpenWorldHint: ptr(true),
 		},
 		Description: "Bazarr's manual search: asks every provider for one movie or one episode and " +
-			"lists everything offered, scored, best first — including matches below the minimum " +
-			"score an automatic search would have rejected. Use it when bazarr_subtitle_search found " +
-			"nothing, or when the subtitle it found is out of sync and a different one is wanted. " +
-			"Only searches the languages in the item's language profile. Each candidate has a short " +
-			"'id' that bazarr_subtitle_download takes. Downloads nothing, but queries every provider, " +
-			"which counts against their rate limits, and can take a minute or more.",
+			"lists everything offered, scored, highest score first — including matches below the " +
+			"minimum score an automatic search would have rejected. The priority is the score: " +
+			"recommend and download the highest-scoring candidate in the wanted language unless the " +
+			"user picks another. Use it when bazarr_subtitle_search found nothing, or when the " +
+			"subtitle it found is out of sync and a different one is wanted. Only searches the " +
+			"languages in the item's language profile. Each candidate has a short 'id' that " +
+			"bazarr_subtitle_download takes. Downloads nothing, but queries every provider, which " +
+			"counts against their rate limits, and can take a minute or more.",
 	}, handleBazarrCandidates)
 
 	if bazarr.ReadOnly() {
@@ -1014,8 +1016,8 @@ func registerBazarrTools(s *sdk.Server) {
 			OpenWorldHint:   ptr(true),
 			IdempotentHint:  true,
 		},
-		Description: "Asks Bazarr to search its providers now and download the best subtitle above " +
-			"its minimum score — the Search button of Bazarr's own UI. Pass 'language' for one " +
+		Description: "Asks Bazarr to search its providers now and download the highest-scoring " +
+			"subtitle above its minimum score — the Search button of Bazarr's own UI. Pass 'language' for one " +
 			"language ('pb' for Brazilian Portuguese; 'pt-BR' and names are understood), which works " +
 			"even if the language profile does not ask for it; omit it to fetch everything the " +
 			"profile says is missing. Targets a movie ('radarr_id', Radarr's id), an episode " +
@@ -1034,7 +1036,8 @@ func registerBazarrTools(s *sdk.Server) {
 			IdempotentHint:  true,
 		},
 		Description: "Downloads one subtitle picked from a bazarr_subtitle_candidates listing, by the " +
-			"short 'id' that listing gave it. Ids last 30 minutes. The file is written next to the " +
+			"short 'id' that listing gave it — the highest-scoring one unless the user chose " +
+			"another. Ids last 30 minutes. The file is written next to the " +
 			"video, replacing any subtitle already there in that language. Asks the user first, " +
 			"naming the provider, the score and the release it was made for.",
 	}, handleBazarrDownload)

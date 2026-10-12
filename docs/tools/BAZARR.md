@@ -9,8 +9,8 @@ Design notes: [docs/modules/bazarr.md](../modules/bazarr.md).
 | `bazarr_system_health` | — | version, link to Sonarr and Radarr, every provider and whether it is throttled, failing health checks | – |
 | `bazarr_subtitle_status` | `radarr_id` / `series_id` / `episode_id` / `term`, `limit` | which subtitles something has, which its profile says are missing, and which profile that is | – |
 | `bazarr_wanted_subtitles` | `kind`, `limit` | Bazarr's Wanted list | – |
-| `bazarr_subtitle_candidates` | `radarr_id` / `episode_id`, `language`, `limit` | a manual search: every subtitle every provider offered, scored | – |
-| `bazarr_subtitle_search` | `radarr_id` / `series_id` / `episode_id`, `language`, `forced`, `hi` | searches the providers now and downloads the best match | **yes** |
+| `bazarr_subtitle_candidates` | `radarr_id` / `episode_id`, `language`, `limit` | a manual search: every subtitle every provider offered, highest score first | – |
+| `bazarr_subtitle_search` | `radarr_id` / `series_id` / `episode_id`, `language`, `forced`, `hi` | searches the providers now and downloads the highest-scoring match | **yes** |
 | `bazarr_subtitle_download` | `id` | downloads one candidate from a manual search | **yes** |
 | `bazarr_subtitle_sync` | `radarr_id` / `episode_id`, `language`, `forced`, `hi`, `shift_ms` | fixes a subtitle's timing, by the audio or by a fixed shift | **yes** |
 | `bazarr_language_profile_set` | `radarr_id` / `series_id`, `profile` | changes which subtitles Bazarr wants for a movie or series | **yes** |
@@ -180,9 +180,9 @@ there is one nobody reads.
 | `language` | string | only show this language; must be in the item's profile |
 | `limit` | integer | default `15`, max `50` |
 
-Bazarr's manual search: every subtitle every provider offered, scored best
-first — including the ones below the minimum score an automatic search throws
-away.
+Bazarr's manual search: every subtitle every provider offered, scored, highest
+score first — including the ones below the minimum score an automatic search
+throws away.
 
 ```
 subtitles offered for Dune (2021)
@@ -192,15 +192,22 @@ ID        SCORE  LANG  PROVIDER          MATCHES              RELEASE
 3f9c01ab    93%  pb    opensubtitlescom  release_group,source  Dune.2021.1080p.WEB-DL-GROUP
 b71e22d0    71%  pb    podnapisi         source                Dune.2021.720p.BluRay (+4)
 
-2 offered, 2 shown
+2 offered, 2 shown, highest score first
+best match: 3f9c01ab (93%, opensubtitlescom) — the one to download unless the user picks another
 ```
 
+- **The highest score is the priority.** The list is sorted by score on this
+  server — not trusted to arrive that way — so `limit` always keeps the top
+  ones, and equal scores keep Bazarr's own order. The first candidate is the
+  one to recommend and download unless the user asks for another.
 - **It searches only the languages in the item's profile.** That is how Bazarr
   does it, so with no profile the search is empty by construction — it is
   refused up front instead of waiting a minute for an empty list, and
   `bazarr_subtitle_search` with a `language` is named as the way round.
-- **`hash` is the only match that guarantees sync.** Without it, prefer a
-  candidate whose matches include `release_group`.
+- **`hash` is the only match that guarantees sync.** The score already weighs
+  it, along with release group, source and resolution, so with no hash match
+  the highest score is still the best bet; if it turns out to be off,
+  `bazarr_subtitle_sync` aligns it to the audio.
 - **It is not free.** It queries every provider, and they count those queries
   against their rate limits. It can take a minute or more.
 - **The `id` is this server's, not Bazarr's.** See

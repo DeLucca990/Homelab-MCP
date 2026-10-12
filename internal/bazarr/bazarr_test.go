@@ -586,6 +586,30 @@ func TestCandidatesKeepBazarrsTokenAndDownloadSendsItBack(t *testing.T) {
 	}
 }
 
+func TestCandidatesAreHighestScoreFirst(t *testing.T) {
+	m := newMockBazarr(t)
+	m.movies[42] = dune(1)
+	m.candidates = []map[string]any{
+		{"provider": "podnapisi", "language": "pt-BR", "score": 40, "subtitle": "low"},
+		{"provider": "opensubtitlescom", "language": "pt-BR", "score": 93, "subtitle": "top"},
+		{"provider": "addic7ed", "language": "pt-BR", "score": 71, "subtitle": "mid-a"},
+		{"provider": "subdl", "language": "pt-BR", "score": 71, "subtitle": "mid-b"},
+	}
+
+	list, err := GetCandidates(context.Background(), Target{RadarrID: 42}, "pb", 3)
+	if err != nil {
+		t.Fatalf("GetCandidates: %v", err)
+	}
+	var got []string
+	for _, c := range list.Candidates {
+		got = append(got, fmt.Sprintf("%s:%d", c.Provider, c.Score))
+	}
+	want := []string{"opensubtitlescom:93", "addic7ed:71", "subdl:71"}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Errorf("the limit should keep the highest scores, ties in Bazarr's order: got %v, want %v", got, want)
+	}
+}
+
 func TestCandidatesNeedAProfile(t *testing.T) {
 	m := newMockBazarr(t)
 	m.movies[42] = dune(nil)

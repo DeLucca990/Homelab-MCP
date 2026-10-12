@@ -22,7 +22,7 @@ type bazarrCandidatesInput struct {
 	RadarrID  int    `json:"radarr_id,omitempty" jsonschema:"a movie, by Radarr's own id"`
 	EpisodeID int    `json:"episode_id,omitempty" jsonschema:"an episode, by Sonarr's episode id — a manual search is always for one file"`
 	Language  string `json:"language,omitempty" jsonschema:"only show candidates in this language — a code ('en', 'pb' for Brazilian Portuguese, 'pt-BR' is understood) or a name. It must be in the item's language profile"`
-	Limit     int    `json:"limit,omitempty" jsonschema:"how many candidates to list, best first; default 15, maximum 50"`
+	Limit     int    `json:"limit,omitempty" jsonschema:"how many candidates to list, highest score first; default 15, maximum 50"`
 }
 
 func handleBazarrCandidates(
@@ -74,7 +74,13 @@ func renderBazarrCandidates(c bazarr.Candidates) string {
 		b.WriteString(table(cols, rows))
 	}
 
-	fmt.Fprintf(&b, "\n%d offered, %d shown\n", c.TotalCount, c.ShownCount)
+	fmt.Fprintf(&b, "\n%d offered, %d shown, highest score first\n", c.TotalCount, c.ShownCount)
+
+	if len(c.Candidates) > 0 {
+		best := c.Candidates[0]
+		fmt.Fprintf(&b, "best match: %s (%d%%, %s) — the one to download unless the user picks another\n",
+			best.ID, best.Score, best.Provider)
+	}
 
 	for _, w := range c.Warnings {
 		fmt.Fprintf(&b, "\nwarning: %s\n", w)
