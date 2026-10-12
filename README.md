@@ -68,11 +68,11 @@ Radarr will not tell you:
 - **Go 1.26+** to build ([install](https://go.dev/dl/))
 - **Linux** for the intended target. It compiles and runs on macOS and Windows too, but the
   filtering heuristics (snap packages, Docker layers) and the CPU breakdown assume a Linux host.
-- **Node.js** only for the MCP Inspector (`make inspect`) or the `mcp-remote` bridge
+- **Node.js** only for the MCP Inspector (`make inspect`)
 
 Docker access needs membership in the `docker` group. The read-only system tools need no
-elevation, and the server runs with the privileges of whoever launches it — normally your MCP
-client, not root.
+elevation, and the server runs with the privileges of whoever launches it — normally the
+`User=` of [its systemd unit](#under-systemd), not root.
 
 ## Clone and build
 
@@ -90,8 +90,8 @@ go build -o bin/server ./cmd/server
 
 ## Configuration
 
-Everything is environment variables, read **once, at startup** — restart your MCP client after
-changing any of them.
+Everything is environment variables, read **once, at startup** — restart the server (and the
+bot, for its own variables) after changing any of them.
 
 | Variable | Enables | Reference |
 | --- | --- | --- |
@@ -106,7 +106,6 @@ changing any of them.
 | `HOMELAB_MCP_JELLYFIN_READONLY` | drops Jellyfin's seven writes | [docs/tools/JELLYFIN.md](docs/tools/JELLYFIN.md#configuration) |
 | `SERVER_URL` + `BAZARR_API_KEY` | the whole Bazarr family | [docs/tools/BAZARR.md](docs/tools/BAZARR.md#configuration) |
 | `HOMELAB_MCP_BAZARR_READONLY` | drops Bazarr's five writes | [docs/tools/BAZARR.md](docs/tools/BAZARR.md#configuration) |
-| `HOMELAB_MCP_TRUST_CLIENT_CONFIRMATION` | acting on clients that cannot show a server confirmation | [below](#approving-actions) |
 | `HOMELAB_MCP_HTTP_ADDR` + `HOMELAB_MCP_HTTP_TOKEN` | **required** — the address it listens on and the token it demands | [below](#over-http-instead) |
 | `TELEGRAM_BOT_TOKEN` + `TELEGRAM_ALLOWED_USER_IDS` | the Telegram bot, a separate binary — read by it, not by the server | [docs/modules/telegram.md](docs/modules/telegram.md#2-the-env) |
 
@@ -199,20 +198,14 @@ operation, wait for a decision, and bind the approval to that exact operation wi
 fingerprint — so approving `ls /config` cannot execute `rm -rf /config`, approving one
 film cannot add another, and approving a search of season 3 cannot search all nine seasons.
 
-Which side asks depends on the client:
+The server asks, not the client. The request reaches the user through MCP elicitation, showing
+the exact operation, per command: the [Telegram bot](#on-telegram) turns it into a message with
+**Aprovar** / **Recusar** buttons, and Claude Code (since 2.1.76) shows it in the terminal.
+Setting a tool to always-allow in a client does not bypass it.
 
-- **Clients that support MCP elicitation** — Claude Code since 2.1.76, March 2026 — get the
-  request from the server, showing the exact operation. This is per-command, and setting the
-  tool to always-allow does not bypass it.
-- **Clients that do not** — Claude Desktop still among them as of August 2026 — cannot be asked
-  anything by the server, so it refuses to act. They prompt for tool approval themselves, and
-  you can tell the server to accept that with `HOMELAB_MCP_TRUST_CLIENT_CONFIRMATION=1`.
-
-That second setting is you vouching for your client, and it has to be: the identity a client
-reports is self-declared and unauthenticated, so a server cannot recognise a trustworthy client
-— it can only be told. Know what you are accepting: the client's prompt is per-tool rather than
-per-command, and a client set to always-allow stops asking. The Docker allowlist still holds in
-every case.
+A client that cannot show that request is refused, and no setting changes that: a client's own
+approval prompt is per-tool rather than per-command, and one set to always-allow stops asking.
+The Docker allowlist holds in every case.
 
 The mechanism, and what the fingerprint does and does not protect:
 [docs/ARCHITECTURE.md §3](docs/ARCHITECTURE.md#3-waiting-for-a-user-response).
@@ -322,13 +315,10 @@ cannot do is the [thirty-four writes](#approving-actions): it declares its capab
 `initialize`, and a sessionless server keeps nothing from that — so the server cannot tell
 whether it could be shown a confirmation, and it does not act without one. It refuses with
 `this client ("") cannot show a confirmation coming from the server`, where the empty name is
-itself the symptom. Set `HOMELAB_MCP_TRUST_CLIENT_CONFIRMATION=1` to accept the approval
-prompt that client shows before calling a tool — which is what Claude Desktop needs today.
+itself the symptom.
 
 Note also that there is no connect-time line in the log to consult: it belonged to the old
-handshake, which a sessionless server never performs. The refusal above is the whole signal —
-and, once the variable is set, the line the server writes each time it proceeds on the client's
-prompt instead of its own.
+handshake, which a sessionless server never performs. The refusal above is the whole signal.
 
 #### Behind Tailscale
 
@@ -363,37 +353,14 @@ HTTP** in the UI, paste the URL from the startup line, and add an `Authorization
 
 #### Pointing clients at it
 
-**Claude Code**, and any client that speaks HTTP natively:
+The [Telegram bot](#on-telegram) is the client this runs with: it reads the same `.env` and finds
+the server from `HOMELAB_MCP_HTTP_ADDR` on its own. **Claude Code**, or any other client that
+speaks HTTP natively, can be pointed at it too:
 
 ```sh
 claude mcp add --transport http homelab https://homelab.your-tailnet.ts.net/mcp \
   --header "Authorization: Bearer $HOMELAB_MCP_HTTP_TOKEN"
 ```
-
-**Claude Desktop** needs a bridge. Its custom connectors will not work here: that connection is
-made from Anthropic's servers rather than from your machine, so it cannot reach a tailnet
-address — and `claude_desktop_config.json` itself accepts stdio servers only. `mcp-remote` is a
-stdio server that speaks HTTP on the other side, and it runs on your machine, which is the one
-on the tailnet:
-
-```json
-{
-  "mcpServers": {
-    "homelab": {
-      "command": "npx",
-      "args": [
-        "-y", "mcp-remote",
-        "https://homelab.your-tailnet.ts.net/mcp",
-        "--header", "Authorization: Bearer ${HOMELAB_MCP_TOKEN}"
-      ],
-      "env": { "HOMELAB_MCP_TOKEN": "your-token" }
-    }
-  }
-}
-```
-
-Note that the `env` block *does* work here, unlike over SSH — the variable is read by a local
-process, so nothing has to survive a hop.
 
 ## Documentation
 

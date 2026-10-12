@@ -16,7 +16,8 @@ question rather than a reading.
 | `homelab://bazarr/language-profiles` | the profiles `bazarr_language_profile_set` accepts, with their languages, and the language codes the subtitle tools take | with Bazarr |
 
 A client reads them with `resources/read`; most also let you attach one to a
-conversation directly.
+conversation directly. The Telegram bot reads them through a tool of its own,
+`homelab_resource_read` ([details](../modules/telegram.md#plain-words)).
 
 ## Why these are not tools
 

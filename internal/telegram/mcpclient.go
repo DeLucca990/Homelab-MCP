@@ -155,6 +155,54 @@ func (m *MCP) Call(ctx context.Context, name string, args map[string]any) (text 
 	return resultText(res), res.IsError, nil
 }
 
+// Sorted for the same reason as Tools: the resource tool's description lists them.
+func (m *MCP) Resources(ctx context.Context) ([]*sdk.Resource, error) {
+	return retry(ctx, m, func(session *sdk.ClientSession) ([]*sdk.Resource, error) {
+		var resources []*sdk.Resource
+		for r, err := range session.Resources(ctx, nil) {
+			if err != nil {
+				return nil, fmt.Errorf("listing resources: %w", err)
+			}
+			resources = append(resources, r)
+		}
+		sort.Slice(resources, func(i, j int) bool { return resources[i].URI < resources[j].URI })
+		return resources, nil
+	})
+}
+
+func (m *MCP) ReadResource(ctx context.Context, uri string) (string, error) {
+	res, err := retry(ctx, m, func(session *sdk.ClientSession) (*sdk.ReadResourceResult, error) {
+		return session.ReadResource(ctx, &sdk.ReadResourceParams{URI: uri})
+	})
+	if err != nil {
+		return "", fmt.Errorf("resource %s: %w", uri, err)
+	}
+
+	var parts []string
+	for _, c := range res.Contents {
+		if c.Text != "" {
+			parts = append(parts, c.Text)
+		}
+	}
+	if len(parts) == 0 {
+		return "(empty)", nil
+	}
+	return strings.Join(parts, "\n\n"), nil
+}
+
+func (m *MCP) Prompts(ctx context.Context) ([]string, error) {
+	return retry(ctx, m, func(session *sdk.ClientSession) ([]string, error) {
+		var names []string
+		for p, err := range session.Prompts(ctx, nil) {
+			if err != nil {
+				return nil, fmt.Errorf("listing prompts: %w", err)
+			}
+			names = append(names, p.Name)
+		}
+		return names, nil
+	})
+}
+
 func (m *MCP) Prompt(ctx context.Context, name string) (string, error) {
 	res, err := retry(ctx, m, func(session *sdk.ClientSession) (*sdk.GetPromptResult, error) {
 		return session.GetPrompt(ctx, &sdk.GetPromptParams{Name: name})

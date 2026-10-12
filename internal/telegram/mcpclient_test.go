@@ -70,6 +70,23 @@ func newFakeServer(t *testing.T) *fakeServer {
 			}}, nil
 		})
 
+	server.AddPrompt(&sdk.Prompt{Name: "why-no-download"},
+		func(context.Context, *sdk.GetPromptRequest) (*sdk.GetPromptResult, error) {
+			return &sdk.GetPromptResult{Messages: []*sdk.PromptMessage{
+				{Role: "user", Content: &sdk.TextContent{Text: "The library first."}},
+			}}, nil
+		})
+
+	server.AddResource(&sdk.Resource{
+		URI:         "homelab://thing/profiles",
+		Name:        "thing-profiles",
+		Description: "The profiles write_thing accepts.",
+	}, func(_ context.Context, req *sdk.ReadResourceRequest) (*sdk.ReadResourceResult, error) {
+		return &sdk.ReadResourceResult{Contents: []*sdk.ResourceContents{
+			{URI: req.Params.URI, MIMEType: "text/markdown", Text: "| HD-1080p |"},
+		}}, nil
+	})
+
 	handler := sdk.NewStreamableHTTPHandler(
 		func(*http.Request) *sdk.Server { return server },
 		&sdk.StreamableHTTPOptions{Stateless: true, DisableLocalhostProtection: true},

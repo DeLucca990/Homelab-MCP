@@ -9,8 +9,9 @@ check things in, and the trap waiting at each step.
 | `why-no-download` | `title` (optional) | when Radarr or Sonarr is configured |
 
 Clients surface these differently — Claude Code lists them as slash commands,
-others as a picker. Either way the client fetches the text and sends it as the
-user's message; nothing here runs on its own.
+others as a picker, and the client fetches the text and sends it as the user's
+message. The Telegram bot puts both in its system prompt instead, so they apply
+to any question they fit. Nothing here runs on its own.
 
 ## Why they exist
 

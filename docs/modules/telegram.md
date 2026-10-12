@@ -77,9 +77,8 @@ ANTHROPIC_API_KEY=sk-ant-...        # optional: without it, commands only
 | `TELEGRAM_EFFORT` | `medium` | `low` … `max` |
 | `TELEGRAM_APPROVAL_TIMEOUT` | `2m` | how long a question waits for a button |
 
-`HOMELAB_MCP_TRUST_CLIENT_CONFIRMATION` is **not** needed and should stay unset
-for the bot's sake: the bot declares elicitation, so the server asks it, per
-command, like it asks Claude Code.
+The bot declares elicitation, so the server asks it, per command, before every
+write — there is no setting on either side that skips that.
 
 Every problem in the configuration is reported at once, on startup:
 
@@ -148,8 +147,20 @@ arrives as a `.txt` file instead.
 Anything that is not a command goes to Claude with every tool the server
 registered, unchanged — name, description, schema — and the loop runs until
 Claude has an answer, at most 12 steps. The system prompt is short and fixed,
-plus the server's own [`triage`](../tools/PROMPTS.md#triage) prompt, which
-already states the order to diagnose in.
+plus the server's own [procedures](../tools/PROMPTS.md): `triage`, and
+`why-no-download` where Radarr or Sonarr is configured, which already state the
+order to diagnose in. They are fetched once per process.
+
+- **Resources** — the server's tool descriptions point at its
+  [resources](../tools/RESOURCES.md) by URI (*"homelab://bazarr/language-profiles
+  lists them"*), and the Messages API has no resources. So the bot adds one tool
+  of its own, `homelab_resource_read`, whose description lists every resource
+  the server registered and which reads one through `resources/read`. It changes
+  nothing, so it asks nothing.
+- **Only text reaches Claude.** Of a tool it gets the description and the input
+  schema; of a result, the text channel. The output schema — and any
+  `jsonschema` description on an output field — never arrives, so guidance
+  meant for the model goes in the description or the rendered text.
 
 - **History** is per chat, append-only, and dropped after 30 idle minutes or
   160 messages. It is never trimmed from the front: that would change the
@@ -161,7 +172,8 @@ already states the order to diagnose in.
   still running — usually waiting on an approval — is answered with "still on
   the previous one" rather than queued.
 - **Caching** covers tools, system prompt and history. The tool list is sorted
-  by name, so it is the same bytes on every request.
+  by name, with `homelab_resource_read` last, so it is the same bytes on every
+  request.
 - **Refusals**: requests carry `fallbacks: "default"` (beta
   `server-side-fallback-2026-07-01`), so one a safety classifier declines is
   re-served by another model within the same call.

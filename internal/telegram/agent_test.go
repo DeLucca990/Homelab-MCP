@@ -93,15 +93,18 @@ func TestAgentRunsApprovedWrite(t *testing.T) {
 
 	first := claude.requests[0]
 	tools, _ := first["tools"].([]any)
-	if len(tools) != 2 || tools[0].(map[string]any)["name"] != "read_thing" {
+	if len(tools) != 3 || tools[0].(map[string]any)["name"] != "read_thing" ||
+		tools[2].(map[string]any)["name"] != resourceTool {
 		t.Errorf("tools: %v", first["tools"])
 	}
 	if first["model"] != defaultModel || first["cache_control"] == nil || first["fallbacks"] != "default" {
 		t.Errorf("request settings: model=%v cache_control=%v fallbacks=%v",
 			first["model"], first["cache_control"], first["fallbacks"])
 	}
-	if system, _ := json.Marshal(first["system"]); !strings.Contains(string(system), "Start with read_thing.") {
-		t.Errorf("the server's triage procedure is not in the system prompt: %s", system)
+	system, _ := json.Marshal(first["system"])
+	if !strings.Contains(string(system), "Start with read_thing.") ||
+		!strings.Contains(string(system), "The library first.") {
+		t.Errorf("the server's procedures are not in the system prompt: %s", system)
 	}
 	if oc, _ := first["output_config"].(map[string]any); oc["effort"] != defaultEffort {
 		t.Errorf("effort: %v", first["output_config"])
@@ -126,6 +129,29 @@ func TestAgentReportsDeclinedWriteToClaude(t *testing.T) {
 	second, _ := json.Marshal(claude.requests[1]["messages"])
 	if !strings.Contains(string(second), `"is_error":true`) || !strings.Contains(string(second), "declined") {
 		t.Errorf("the decline did not reach Claude as an error: %s", second)
+	}
+}
+
+func TestAgentReadsResource(t *testing.T) {
+	mcpServer := newFakeServer(t)
+	claude := newFakeClaude(t,
+		message("tool_use", `[{"type":"tool_use","id":"tu_1","name":"`+resourceTool+`","input":{"uri":"homelab://thing/profiles"}}]`),
+		message("end_turn", `[{"type":"text","text":"Use HD-1080p."}]`),
+	)
+	approvals, _ := newApprovalHarness("", 42, time.Second)
+	agent := newTestAgent(t, claude, mcpServer, approvals)
+
+	if _, err := agent.Ask(context.Background(), 1, 42, "quais perfis existem?"); err != nil {
+		t.Fatal(err)
+	}
+
+	tools, _ := json.Marshal(claude.requests[0]["tools"])
+	if !strings.Contains(string(tools), "homelab://thing/profiles — The profiles write_thing accepts.") {
+		t.Errorf("the resource is not described in the tool: %s", tools)
+	}
+	second, _ := json.Marshal(claude.requests[1]["messages"])
+	if !strings.Contains(string(second), "| HD-1080p |") || strings.Contains(string(second), `"is_error":true`) {
+		t.Errorf("the resource did not reach Claude: %s", second)
 	}
 }
 

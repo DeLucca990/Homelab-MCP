@@ -195,17 +195,9 @@ func handleConfigurationResource(ctx context.Context, req *sdk.ReadResourceReque
 	writeBazarrConfiguration(&b)
 	writeProwlarrConfiguration(&b)
 
-	b.WriteString("## Approving an action\n\n")
-	if trustClientConfirmation() {
-		b.WriteString("`" + trustClientEnv + "` is set: this server accepts the approval prompt " +
-			"the client shows before calling a tool, instead of asking for one itself. That " +
-			"prompt is per-tool where the server's is per-command.\n\n")
-	} else {
-		b.WriteString("Every tool that changes something asks the user through the client, " +
-			"per command, and refuses to act if the client cannot show that request. " +
-			"Set `" + trustClientEnv + "=1` only to accept a client's own approval prompt " +
-			"instead.\n\n")
-	}
+	b.WriteString("## Approving an action\n\n" +
+		"Every tool that changes something asks the user through the client, per command, " +
+		"and refuses to act if the client cannot show that request.\n\n")
 
 	b.WriteString("_No API key appears in this document, and none ever will._\n")
 

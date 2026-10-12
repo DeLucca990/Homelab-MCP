@@ -6,26 +6,12 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
-	"os"
-	"strings"
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // The human-in-the-loop round trip shared by every state-changing tool.
 const confirmKey = "confirm"
-
-// trustClientEnv is the operator vouching that their client prompts before
-// calling a tool, so this server may act without a confirmation of its own.
-const trustClientEnv = "HOMELAB_MCP_TRUST_CLIENT_CONFIRMATION"
-
-func trustClientConfirmation() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv(trustClientEnv))) {
-	case "1", "true", "yes":
-		return true
-	}
-	return false
-}
 
 // A schema with no properties: the confirmation asks for a decision, not for
 // input. Built per call rather than shared, so no request can mutate it.
@@ -83,20 +69,14 @@ type approval struct {
 // not proceed; and (true, nil, nil) once the user has approved this exact
 // operation.
 func requireApproval(req *sdk.CallToolRequest, a approval) (bool, *sdk.CallToolResult, error) {
+	// There is no way round this: a client's own approval prompt is per-tool
+	// rather than per-command, and one set to always-allow stops asking.
 	if len(req.Params.InputResponses) == 0 && !clientCanConfirm(req.Session) {
-		if !trustClientConfirmation() {
-			return false, nil, fmt.Errorf(
-				"%s: this client (%q) cannot show a confirmation coming from the server, "+
-					"and this server will not act without one. Either use a client that "+
-					"supports MCP elicitation, or set %s=1 to accept the approval prompt the "+
-					"client shows before calling a tool — that is per-tool rather than "+
-					"per-command, and a client set to always-allow stops asking",
-				a.refusal, clientName(req.Session), trustClientEnv)
-		}
-
-		log.Printf("%s: proceeding on the approval prompt of %q (%s is set)",
-			a.subject, clientName(req.Session), trustClientEnv)
-		return true, nil, nil
+		return false, nil, fmt.Errorf(
+			"%s: this client (%q) cannot show a confirmation coming from the server, "+
+				"and this server will not act without one — use a client that supports "+
+				"MCP elicitation, such as the Telegram bot",
+			a.refusal, clientName(req.Session))
 	}
 
 	// First pass: describe what would happen and hand the decision over.

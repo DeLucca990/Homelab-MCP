@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -22,11 +23,21 @@ const (
 
 	// History is append-only and dropped whole, never trimmed from the front:
 	// trimming would invalidate the prompt cache and earlier thinking blocks.
-	idleReset    = 30 * time.Minute
-	maxHistory   = 160
-	callTimeout  = 5 * time.Minute
-	triagePrompt = "triage"
+	idleReset   = 30 * time.Minute
+	maxHistory  = 160
+	callTimeout = 5 * time.Minute
+
+	// Not one of the server's tools: the bot's way into the server's resources.
+	resourceTool = "homelab_resource_read"
 )
+
+// The server's procedures, in the order they go into the system prompt. A
+// procedure the server did not register is left out: why-no-download exists
+// only where Radarr or Sonarr does.
+var procedures = []struct{ prompt, when string }{
+	{"triage", "When asked what is wrong with the server"},
+	{"why-no-download", "When asked why a film or series has not downloaded"},
+}
 
 const systemPrompt = `You are the operator's assistant for their Linux home server, reached through a Telegram chat. The tools are the server's Homelab MCP: system health, Docker, Radarr, Sonarr, Prowlarr, Jellyfin and Bazarr — only the ones this server has configured.
 
@@ -96,12 +107,25 @@ func (a *Agent) systemText(ctx context.Context) string {
 	if a.system != "" {
 		return a.system
 	}
-	triage, err := a.mcp.Prompt(ctx, triagePrompt)
+	listed, err := a.mcp.Prompts(ctx)
 	if err != nil {
-		log.Printf("agent: no triage procedure this time: %v", err)
+		log.Printf("agent: no procedures this time: %v", err)
 		return systemPrompt
 	}
-	a.system = systemPrompt + "\n\nWhen asked what is wrong with the server, this is the procedure:\n\n" + triage
+
+	text := systemPrompt
+	for _, p := range procedures {
+		if !slices.Contains(listed, p.prompt) {
+			continue
+		}
+		body, err := a.mcp.Prompt(ctx, p.prompt)
+		if err != nil {
+			log.Printf("agent: no %s procedure this time: %v", p.prompt, err)
+			return systemPrompt
+		}
+		text += "\n\n" + p.when + ", this is the procedure:\n\n" + body
+	}
+	a.system = text
 	return a.system
 }
 
@@ -251,8 +275,19 @@ func (a *Agent) runTools(ctx context.Context, content []anthropic.BetaContentBlo
 			continue
 		}
 
-		log.Printf("%s → %s", who(requesterOf(ctx)), use.Name)
-		text, isError, err := a.mcp.Call(ctx, use.Name, args)
+		var (
+			text    string
+			isError bool
+			err     error
+		)
+		if use.Name == resourceTool {
+			uri, _ := args["uri"].(string)
+			log.Printf("%s → %s %s", who(requesterOf(ctx)), use.Name, uri)
+			text, err = a.mcp.ReadResource(ctx, uri)
+		} else {
+			log.Printf("%s → %s", who(requesterOf(ctx)), use.Name)
+			text, isError, err = a.mcp.Call(ctx, use.Name, args)
+		}
 		if err != nil {
 			text, isError = err.Error(), true
 		}
@@ -286,11 +321,48 @@ func (a *Agent) tools(ctx context.Context) ([]anthropic.BetaToolUnionParam, erro
 	if err != nil {
 		return nil, err
 	}
-	tools := make([]anthropic.BetaToolUnionParam, 0, len(listed))
+	tools := make([]anthropic.BetaToolUnionParam, 0, len(listed)+1)
 	for _, t := range listed {
 		tools = append(tools, claudeTool(t))
 	}
+
+	// Without the resources the bot still answers, just without that tool.
+	resources, err := a.mcp.Resources(ctx)
+	if err != nil {
+		log.Printf("agent: no resources this time: %v", err)
+	} else if len(resources) > 0 {
+		tools = append(tools, resourceToolParam(resources))
+	}
 	return tools, nil
+}
+
+// The server's tool descriptions point at its resources by URI — the quality
+// profiles, root folders and language codes the writes take, and why a tool is
+// missing. The Messages API has no resources, so this one tool reads any of them.
+func resourceToolParam(resources []*sdk.Resource) anthropic.BetaToolUnionParam {
+	var b strings.Builder
+	b.WriteString("Reads one of the server's reference documents. Other tools' descriptions name " +
+		"these by their homelab:// URI: read the one named before choosing a quality profile, " +
+		"root folder, library, sync profile or language code, instead of guessing and reading " +
+		"the refusal. Changes nothing.\n")
+
+	uris := make([]any, 0, len(resources))
+	for _, r := range resources {
+		uris = append(uris, r.URI)
+		fmt.Fprintf(&b, "\n- %s — %s", r.URI, r.Description)
+	}
+
+	tool := anthropic.BetaToolParam{
+		Name:        resourceTool,
+		Description: anthropic.String(b.String()),
+		InputSchema: anthropic.BetaToolInputSchemaParam{
+			Properties: map[string]any{
+				"uri": map[string]any{"type": "string", "enum": uris},
+			},
+			Required: []string{"uri"},
+		},
+	}
+	return anthropic.BetaToolUnionParam{OfTool: &tool}
 }
 
 func claudeTool(t *sdk.Tool) anthropic.BetaToolUnionParam {
