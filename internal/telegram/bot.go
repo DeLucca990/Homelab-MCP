@@ -63,7 +63,11 @@ func (b *Bot) Run(ctx context.Context) {
 	if b.agent != nil {
 		mode = "commands and natural language with " + b.cfg.Model + ", effort " + b.cfg.Effort
 	}
-	log.Printf("telegram bot running for %d user(s), MCP at %s: %s", len(b.cfg.AllowedUsers), b.cfg.MCPURL, mode)
+	log.Printf("telegram bot running for %d user(s), %d of them admin, MCP at %s: %s",
+		len(b.cfg.AllowedUsers), len(b.cfg.AdminUsers), b.cfg.MCPURL, mode)
+	if len(b.cfg.AdminUsers) == 0 {
+		log.Printf("%s is not set: removals, restarts and configuration changes are refused for everyone", AdminUsersEnv)
+	}
 
 	b.tg.Start(ctx)
 }
@@ -122,6 +126,7 @@ func (b *Bot) onCallback(ctx context.Context, q *models.CallbackQuery) {
 func (b *Bot) onText(ctx context.Context, msg *models.Message) {
 	chatID := msg.Chat.ID
 	text, _ := addressed(msg, b.username, b.tg.ID())
+	admin := b.cfg.IsAdmin(msg.From.ID)
 
 	switch name, _ := parseCommand(text); name {
 	case "":
@@ -130,7 +135,7 @@ func (b *Bot) onText(ctx context.Context, msg *models.Message) {
 		}
 		b.ask(ctx, chatID, msg.From.ID, text)
 	case "start", "help":
-		b.sendHTML(ctx, chatID, helpText(b.agent != nil))
+		b.sendHTML(ctx, chatID, helpText(b.agent != nil, admin))
 	case "reset":
 		if b.agent != nil {
 			b.agent.Reset(chatID)
@@ -139,7 +144,7 @@ func (b *Bot) onText(ctx context.Context, msg *models.Message) {
 	default:
 		cmd, ok := findCommand(name)
 		if !ok {
-			b.sendHTML(ctx, chatID, helpText(b.agent != nil))
+			b.sendHTML(ctx, chatID, helpText(b.agent != nil, admin))
 			return
 		}
 		b.runCommand(ctx, chatID, msg.From.ID, cmd)
@@ -150,7 +155,7 @@ func (b *Bot) runCommand(ctx context.Context, chatID, userID int64, cmd command)
 	stop := b.typing(ctx, chatID)
 	defer stop()
 
-	ctx = withRequester(ctx, chatID, userID)
+	ctx = withRequester(ctx, chatID, userID, b.cfg.IsAdmin(userID))
 	ran := 0
 	for _, name := range cmd.tools {
 		ok, err := b.mcp.HasTool(ctx, name)
@@ -182,7 +187,7 @@ func (b *Bot) runCommand(ctx context.Context, chatID, userID int64, cmd command)
 
 func (b *Bot) ask(ctx context.Context, chatID, userID int64, text string) {
 	if b.agent == nil {
-		b.sendHTML(ctx, chatID, helpText(false))
+		b.sendHTML(ctx, chatID, helpText(false, b.cfg.IsAdmin(userID)))
 		return
 	}
 

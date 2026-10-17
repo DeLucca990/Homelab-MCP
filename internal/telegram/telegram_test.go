@@ -15,7 +15,7 @@ import (
 
 func setEnv(t *testing.T, kv map[string]string) {
 	t.Helper()
-	for _, k := range []string{TokenEnv, AllowedUsersEnv, AllowedChatsEnv, MCPURLEnv, ModelEnv, EffortEnv,
+	for _, k := range []string{TokenEnv, AllowedUsersEnv, AdminUsersEnv, AllowedChatsEnv, MCPURLEnv, ModelEnv, EffortEnv,
 		ApprovalTimeoutEnv, mcpAddrEnv, mcpTokenEnv, anthropicKeyEnv, anthropicTokenEnv} {
 		t.Setenv(k, kv[k])
 	}
@@ -239,6 +239,29 @@ func TestConfigGroupIDs(t *testing.T) {
 	}
 }
 
+func TestConfigAdminUsers(t *testing.T) {
+	base := map[string]string{TokenEnv: "x", AllowedUsersEnv: "42, 7", MCPURLEnv: "http://x/mcp", mcpTokenEnv: "t"}
+
+	setEnv(t, base)
+	cfg, err := LoadConfig()
+	if err != nil || cfg.IsAdmin(42) || cfg.IsAdmin(7) {
+		t.Fatalf("without %s nobody is an admin: %v", AdminUsersEnv, err)
+	}
+
+	base[AdminUsersEnv] = "42"
+	setEnv(t, base)
+	cfg, err = LoadConfig()
+	if err != nil || !cfg.IsAdmin(42) || cfg.IsAdmin(7) {
+		t.Fatalf("admins: %v, %v", cfg.AdminUsers, err)
+	}
+
+	base[AdminUsersEnv] = "42, 99"
+	setEnv(t, base)
+	if _, err := LoadConfig(); err == nil || !strings.Contains(err.Error(), "lists 99, not in") {
+		t.Fatalf("an admin who is not an allowed user was accepted: %v", err)
+	}
+}
+
 type fakeTelegram struct {
 	mu      sync.Mutex
 	sent    []string
@@ -317,7 +340,7 @@ func elicit(a *Approvals, ctx context.Context) string {
 
 func TestApprovalAccept(t *testing.T) {
 	a, f := newApprovalHarness("y", 42, time.Second)
-	if got := elicit(a, withRequester(context.Background(), 1, 42)); got != "accept" {
+	if got := elicit(a, withRequester(context.Background(), 1, 42, false)); got != "accept" {
 		t.Fatalf("got %s", got)
 	}
 	if !strings.Contains(f.sent[0], "Restart &lt;jellyfin&gt;?") {
@@ -330,14 +353,14 @@ func TestApprovalAccept(t *testing.T) {
 
 func TestApprovalDecline(t *testing.T) {
 	a, _ := newApprovalHarness("n", 42, time.Second)
-	if got := elicit(a, withRequester(context.Background(), 1, 42)); got != "decline" {
+	if got := elicit(a, withRequester(context.Background(), 1, 42, false)); got != "decline" {
 		t.Fatalf("got %s", got)
 	}
 }
 
 func TestApprovalTimesOut(t *testing.T) {
 	a, f := newApprovalHarness("", 42, 20*time.Millisecond)
-	if got := elicit(a, withRequester(context.Background(), 1, 42)); got != "cancel" {
+	if got := elicit(a, withRequester(context.Background(), 1, 42, false)); got != "cancel" {
 		t.Fatalf("got %s", got)
 	}
 	if !strings.Contains(f.lastEdit(), "Expirou") {
@@ -347,7 +370,7 @@ func TestApprovalTimesOut(t *testing.T) {
 
 func TestApprovalIgnoresAnotherUser(t *testing.T) {
 	a, _ := newApprovalHarness("y", 99, 50*time.Millisecond)
-	if got := elicit(a, withRequester(context.Background(), 1, 42)); got != "cancel" {
+	if got := elicit(a, withRequester(context.Background(), 1, 42, false)); got != "cancel" {
 		t.Fatalf("another user's press decided it: %s", got)
 	}
 }
@@ -435,7 +458,7 @@ func TestFormatApprovalOtherShapes(t *testing.T) {
 
 func TestApprovalSendsPoster(t *testing.T) {
 	a, f := newApprovalHarness("y", 42, time.Second)
-	res, _ := a.Elicit(withRequester(context.Background(), 1, 42),
+	res, _ := a.Elicit(withRequester(context.Background(), 1, 42, false),
 		&sdk.ElicitRequest{Params: &sdk.ElicitParams{Message: radarrAdd}})
 	if res.Action != "accept" {
 		t.Fatalf("got %s", res.Action)
@@ -454,7 +477,7 @@ func TestApprovalSendsPoster(t *testing.T) {
 func TestApprovalFallsBackToTextWithoutPoster(t *testing.T) {
 	a, f := newApprovalHarness("y", 42, time.Second)
 	f.noPhoto = true
-	res, _ := a.Elicit(withRequester(context.Background(), 1, 42),
+	res, _ := a.Elicit(withRequester(context.Background(), 1, 42, false),
 		&sdk.ElicitRequest{Params: &sdk.ElicitParams{Message: radarrAdd}})
 	if res.Action != "accept" || len(f.sent) != 1 {
 		t.Fatalf("got %s after %d messages", res.Action, len(f.sent))

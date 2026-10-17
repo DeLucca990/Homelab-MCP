@@ -52,10 +52,11 @@ Call tools only through tool use. Do not include internal or system XML tags in 
 Tools that change something (restarts, removals, searches, adds) make the server show the user an approval with two buttons before anything happens. If the result says the user declined or did not answer, report that and do not try the same action again unless asked.`
 
 type Agent struct {
-	client anthropic.Client
-	mcp    *MCP
-	model  string
-	effort string
+	client  anthropic.Client
+	mcp     *MCP
+	model   string
+	effort  string
+	isAdmin func(userID int64) bool
 
 	systemMu sync.Mutex
 	system   string
@@ -73,11 +74,12 @@ type conversation struct {
 
 func NewAgent(cfg Config, mcp *MCP, opts ...option.RequestOption) *Agent {
 	return &Agent{
-		client: anthropic.NewClient(opts...),
-		mcp:    mcp,
-		model:  cfg.Model,
-		effort: cfg.Effort,
-		convs:  map[int64]*conversation{},
+		client:  anthropic.NewClient(opts...),
+		mcp:     mcp,
+		model:   cfg.Model,
+		effort:  cfg.Effort,
+		isAdmin: cfg.IsAdmin,
+		convs:   map[int64]*conversation{},
 	}
 }
 
@@ -140,7 +142,8 @@ func (a *Agent) Ask(ctx context.Context, chatID, userID int64, text string) (str
 
 	ctx, cancel := context.WithTimeout(ctx, callTimeout)
 	defer cancel()
-	ctx = withRequester(ctx, chatID, userID)
+	admin := a.isAdmin(userID)
+	ctx = withRequester(ctx, chatID, userID, admin)
 
 	var note string
 	switch {
@@ -152,18 +155,23 @@ func (a *Agent) Ask(ctx context.Context, chatID, userID int64, text string) (str
 	}
 	conv.lastUsed = time.Now()
 
-	tools, err := a.tools(ctx)
+	tools, everyone, err := a.tools(ctx)
 	if err != nil {
 		return "", err
 	}
 
+	access := userNote
+	if admin {
+		access = adminNote
+	}
+
 	// Roll back a failed turn so history never ends on an unanswered tool call.
 	start := len(conv.messages)
-	conv.messages = append(conv.messages,
-		anthropic.NewBetaUserMessage(anthropic.NewBetaTextBlock(text)))
+	conv.messages = append(conv.messages, anthropic.NewBetaUserMessage(
+		anthropic.NewBetaTextBlock(text), anthropic.NewBetaTextBlock(access)))
 
 	var turn spend
-	answer, err := a.loop(ctx, conv, tools, &turn)
+	answer, err := a.loop(ctx, conv, tools, everyone, &turn)
 	a.logSpend(chatID, userID, turn, err)
 	if err != nil {
 		conv.messages = conv.messages[:start]
@@ -215,7 +223,7 @@ func otherThan(models []string, model string) []string {
 	return out
 }
 
-func (a *Agent) loop(ctx context.Context, conv *conversation, tools []anthropic.BetaToolUnionParam, turn *spend) (string, error) {
+func (a *Agent) loop(ctx context.Context, conv *conversation, tools []anthropic.BetaToolUnionParam, everyone map[string]bool, turn *spend) (string, error) {
 	for step := 0; step < maxSteps; step++ {
 		resp, err := a.client.Beta.Messages.New(ctx, anthropic.BetaMessageNewParams{
 			Model:        a.model,
@@ -237,7 +245,7 @@ func (a *Agent) loop(ctx context.Context, conv *conversation, tools []anthropic.
 
 		switch resp.StopReason {
 		case anthropic.BetaStopReasonToolUse:
-			results := a.runTools(ctx, resp.Content)
+			results := a.runTools(ctx, resp.Content, everyone)
 			conv.messages = append(conv.messages, anthropic.NewBetaUserMessage(results...))
 			continue
 
@@ -260,11 +268,21 @@ func (a *Agent) loop(ctx context.Context, conv *conversation, tools []anthropic.
 }
 
 // Sequential, not parallel: concurrent writes would show two sets of approval buttons.
-func (a *Agent) runTools(ctx context.Context, content []anthropic.BetaContentBlockUnion) []anthropic.BetaContentBlockParamUnion {
+// A user who is not an admin may call only the tools in everyone.
+func (a *Agent) runTools(ctx context.Context, content []anthropic.BetaContentBlockUnion, everyone map[string]bool) []anthropic.BetaContentBlockParamUnion {
+	r := requesterOf(ctx)
 	var results []anthropic.BetaContentBlockParamUnion
 	for _, block := range content {
 		use, ok := block.AsAny().(anthropic.BetaToolUseBlock)
 		if !ok {
+			continue
+		}
+
+		if !r.admin && !everyone[use.Name] {
+			log.Printf("%s → %s refused: admin only", who(r), use.Name)
+			results = append(results, anthropic.NewBetaToolResultBlock(use.ID,
+				use.Name+" was not called: it is admin only, and the user who asked is not "+
+					"an admin of this bot. Nothing was done.", true))
 			continue
 		}
 
@@ -316,13 +334,21 @@ func replyText(content []anthropic.BetaContentBlockUnion) string {
 	return strings.Join(parts, "\n\n")
 }
 
-func (a *Agent) tools(ctx context.Context) ([]anthropic.BetaToolUnionParam, error) {
+func (a *Agent) tools(ctx context.Context) ([]anthropic.BetaToolUnionParam, map[string]bool, error) {
 	listed, err := a.mcp.Tools(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	tools := make([]anthropic.BetaToolUnionParam, 0, len(listed)+1)
+	everyone := map[string]bool{resourceTool: true}
 	for _, t := range listed {
+		if adminOnly(t) {
+			marked := *t
+			marked.Description = adminMark + t.Description
+			t = &marked
+		} else {
+			everyone[t.Name] = true
+		}
 		tools = append(tools, claudeTool(t))
 	}
 
@@ -333,7 +359,7 @@ func (a *Agent) tools(ctx context.Context) ([]anthropic.BetaToolUnionParam, erro
 	} else if len(resources) > 0 {
 		tools = append(tools, resourceToolParam(resources))
 	}
-	return tools, nil
+	return tools, everyone, nil
 }
 
 // The server's tool descriptions point at its resources by URI — the quality

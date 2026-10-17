@@ -44,15 +44,19 @@ func parseCommand(text string) (name, target string) {
 	return strings.ToLower(name), target
 }
 
-func helpText(llm bool) string {
+func helpText(llm, admin bool) string {
 	var b strings.Builder
 	b.WriteString("<b>Homelab</b>\n\n")
 	for _, c := range append(toolCommands, otherCommands...) {
 		b.WriteString("/" + c.name + " — " + escape(c.description) + "\n")
 	}
 	if llm {
+		example, limit := "reinicia o jellyfin", ""
+		if !admin {
+			example, limit = "adiciona Duna ao Radarr", " Remover, reiniciar e mudar configurações fica com os administradores."
+		}
 		b.WriteString("\nOu escreva em linguagem natural: <i>por que o Dune não baixou?</i>, " +
-			"<i>reinicia o jellyfin</i>. Ações que mudam algo pedem sua aprovação antes.\n\n" +
+			"<i>" + example + "</i>. Ações que mudam algo pedem sua aprovação antes." + limit + "\n\n" +
 			"Em grupo, eu só respondo a comandos, a uma @menção ou a uma resposta a mensagem minha.")
 	} else {
 		b.WriteString("\nLinguagem natural está desligada: defina ANTHROPIC_API_KEY no servidor do bot para ligar.")
