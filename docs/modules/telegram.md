@@ -74,7 +74,7 @@ ANTHROPIC_API_KEY=sk-ant-...        # optional: without it, commands only
 | `HOMELAB_MCP_URL` | `http://$HOMELAB_MCP_HTTP_ADDR/mcp` | set it when the server sits behind `tailscale serve` or on another host |
 | `HOMELAB_MCP_HTTP_TOKEN` | — | **required**, the server's own token |
 | `ANTHROPIC_API_KEY` | — | turns on natural language (`ANTHROPIC_AUTH_TOKEN` also works) |
-| `TELEGRAM_MODEL` | `claude-sonnet-5-5` | `claude-opus-5-5` costs about twice as much |
+| `TELEGRAM_MODEL` | `claude-sonnet-5-5` | `claude-opus-5-5` costs twice as much |
 | `TELEGRAM_EFFORT` | `medium` | `low`, `medium`, `high` or `xhigh` |
 | `TELEGRAM_APPROVAL_TIMEOUT` | `2m` | how long a question waits for a button |
 | `TELEGRAM_DIGEST_AT` | `17:00` | when the [daily digest](#the-daily-digest) goes out, local time; `off` turns it off |
@@ -286,7 +286,10 @@ was billed. `journalctl -u homelab-telegram-bot | grep '\$'` is the ledger.
 The dollars are an **estimate** from list prices (`prices` in
 `internal/telegram/cost.go`, dated in the code), not the bill: cache writes at
 1.25× input for the 5-minute TTL and 2× for the hour, cache reads at each
-model's own rate. When a fallback answered, each attempt is priced at the rates
+model's own rate — 0.1× input on most, 0.05× on Opus 5.5 and Sonnet 5.5, 0.025×
+on Fable and Mythos 5.1. Haiku 5.5 is the one model priced by prompt length: a
+request whose prompt — input, cache reads and writes together — is over 100,000
+tokens pays five times the rates for all of it. When a fallback answered, each attempt is priced at the rates
 of the model that ran it, from `usage.iterations`. The running total resets
 when the process restarts.
 

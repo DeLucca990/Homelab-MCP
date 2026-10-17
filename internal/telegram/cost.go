@@ -6,8 +6,11 @@ import (
 	"github.com/anthropics/anthropic-sdk-go"
 )
 
-// USD per million tokens, list prices as of 2026-09-25. Cache writes cost
-// 1.25x input (5-minute TTL) or 2x (1 hour).
+// USD per million tokens, the Claude API's list prices as of 2026-10-17
+// (platform.claude.com/docs/en/about-claude/pricing). Cache writes cost 1.25x
+// input (5-minute TTL) or 2x (1 hour) on every model. Cache reads do not share
+// one multiplier — 0.1x on most, 0.05x on Opus 5.5 and Sonnet 5.5, 0.025x on
+// Fable and Mythos 5.1 — so each row states its own.
 type price struct {
 	input, output, cacheRead float64
 }
@@ -22,15 +25,24 @@ var prices = map[string]price{
 	"claude-opus-4-8":   {5, 25, 0.50},
 	"claude-opus-4-7":   {5, 25, 0.50},
 	"claude-opus-4-6":   {5, 25, 0.50},
-	"claude-sonnet-5-5": {2, 10, 0.20},
+	"claude-opus-4-5":   {5, 25, 0.50},
+	"claude-sonnet-5-5": {2, 10, 0.10},
 	"claude-sonnet-5":   {2, 10, 0.20},
 	"claude-sonnet-4-6": {3, 15, 0.30},
-	"claude-haiku-5-5":  {0.10, 0.50, 0.01}, // prompts up to 100K tokens; the digest's headline is far below
+	"claude-sonnet-4-5": {3, 15, 0.30},
+	"claude-haiku-5-5":  {0.10, 0.50, 0.01},
 	"claude-haiku-4-5":  {1, 5, 0.10},
 }
 
+var longPrompts = map[string]struct {
+	over  int64
+	price price
+}{
+	"claude-haiku-5-5": {100_000, price{0.50, 2.50, 0.05}},
+}
+
 // Longest prefix, so "claude-opus-5-5" is not read as "claude-opus-5".
-func priceOf(model string) (price, bool) {
+func priceOf(model string, prompt int64) (price, bool) {
 	best := ""
 	for id := range prices {
 		if strings.HasPrefix(model, id) && len(id) > len(best) {
@@ -38,6 +50,9 @@ func priceOf(model string) (price, bool) {
 		}
 	}
 	p, ok := prices[best]
+	if long, has := longPrompts[best]; has && prompt > long.over {
+		p = long.price
+	}
 	return p, ok
 }
 
@@ -94,7 +109,7 @@ func spendOf(resp *anthropic.BetaMessage) spend {
 func priced(model string, input, output, cacheRead, cacheWrite, write5m, write1h int64) spend {
 	s := spend{input: input, output: output, cacheRead: cacheRead, cacheWrite: cacheWrite}
 
-	p, ok := priceOf(model)
+	p, ok := priceOf(model, input+cacheRead+cacheWrite)
 	if !ok {
 		s.unpriced = []string{model}
 		return s
