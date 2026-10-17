@@ -44,11 +44,18 @@ func newFakeClaude(t *testing.T, script ...string) *fakeClaude {
 		f.mu.Unlock()
 
 		w.Header().Set("Content-Type", "application/json")
+		if body, ok := strings.CutPrefix(resp, badRequest); ok {
+			w.WriteHeader(http.StatusBadRequest)
+			resp = body
+		}
 		io.WriteString(w, resp)
 	}))
 	t.Cleanup(f.Close)
 	return f
 }
+
+// A script entry starting with badRequest is answered with a 400.
+const badRequest = "400 "
 
 func message(stop string, content string) string {
 	return `{"id":"msg","type":"message","role":"assistant","model":"claude-opus-5-5",` +
@@ -105,8 +112,8 @@ func TestAgentRunsApprovedWrite(t *testing.T) {
 			t.Errorf("%s: admin mark %v", tool["name"], marked)
 		}
 	}
-	if msgs, _ := json.Marshal(first["messages"]); !strings.Contains(string(msgs), userNote) {
-		t.Errorf("Claude was not told the user is not an admin: %s", msgs)
+	if note := systemNote(t, first); note != userNote {
+		t.Errorf("Claude was not told the user is not an admin: %q", note)
 	}
 	if first["model"] != defaultModel || first["cache_control"] == nil || first["fallbacks"] != "default" {
 		t.Errorf("request settings: model=%v cache_control=%v fallbacks=%v",
@@ -185,8 +192,8 @@ func TestAgentAdminRunsAdminTool(t *testing.T) {
 	if mcpServer.writes.Load() != 1 || len(tg.sent) != 1 {
 		t.Fatalf("an admin's removal did not run: %d writes, approvals %v", mcpServer.writes.Load(), tg.sent)
 	}
-	if msgs, _ := json.Marshal(claude.requests[0]["messages"]); !strings.Contains(string(msgs), adminNote) {
-		t.Errorf("Claude was not told the user is an admin: %s", msgs)
+	if note := systemNote(t, claude.requests[0]); note != adminNote {
+		t.Errorf("Claude was not told the user is an admin: %q", note)
 	}
 }
 
@@ -261,8 +268,12 @@ func TestAgentKeepsHistoryAcrossTurns(t *testing.T) {
 	agent.Ask(context.Background(), 1, 42, "segunda")
 
 	msgs, _ := claude.requests[1]["messages"].([]any)
-	if len(msgs) != 3 {
-		t.Fatalf("second request carried %d messages, want 3", len(msgs))
+	var roles []string
+	for _, m := range msgs {
+		roles = append(roles, fmt.Sprint(m.(map[string]any)["role"]))
+	}
+	if got := strings.Join(roles, " "); got != "user system assistant user system" {
+		t.Fatalf("second request carried %s", got)
 	}
 
 	if agent.spent.output != 2 || !near(agent.spent.usd, 2*(4+20)/1e6) {
@@ -272,6 +283,82 @@ func TestAgentKeepsHistoryAcrossTurns(t *testing.T) {
 	agent.Reset(1)
 	if len(agent.conversation(1).messages) != 0 {
 		t.Fatal("reset kept the history")
+	}
+}
+
+// systemNote returns the text of the request's last message, which must be the
+// system message after the user's own, holding nothing the user wrote.
+func systemNote(t *testing.T, req map[string]any) string {
+	t.Helper()
+	msgs, _ := req["messages"].([]any)
+	if len(msgs) < 2 {
+		t.Fatalf("%d messages, want the user's and a system message", len(msgs))
+	}
+	user, last := msgs[len(msgs)-2].(map[string]any), msgs[len(msgs)-1].(map[string]any)
+	if user["role"] != "user" || last["role"] != "system" {
+		t.Fatalf("the last two messages are %v and %v, want user and system", user["role"], last["role"])
+	}
+	if raw, _ := json.Marshal(user); strings.Contains(string(raw), "admin of this bot") {
+		t.Errorf("the access note is in the user's own message: %s", raw)
+	}
+	if len(last) != 2 {
+		t.Errorf("the system message carries more than role and content: %v", last)
+	}
+	content, _ := last["content"].([]any)
+	if len(content) != 1 {
+		t.Fatalf("system message content: %v", last["content"])
+	}
+	return fmt.Sprint(content[0].(map[string]any)["text"])
+}
+
+func TestAgentPutsAccessInUserTurnWhenSystemRoleRefused(t *testing.T) {
+	mcpServer := newFakeServer(t)
+	claude := newFakeClaude(t,
+		badRequest+`{"type":"error","error":{"type":"invalid_request_error","message":"role 'system' is not supported on this model"}}`,
+		message("end_turn", `[{"type":"text","text":"um"}]`),
+		message("end_turn", `[{"type":"text","text":"dois"}]`),
+	)
+	approvals, _ := newApprovalHarness("", 42, time.Second)
+	agent := newTestAgent(t, claude, mcpServer, approvals)
+
+	answer, err := agent.Ask(context.Background(), 1, 42, "primeira")
+	if err != nil || answer != "um" {
+		t.Fatalf("the refused turn was not retried: %q, %v", answer, err)
+	}
+	if _, err := agent.Ask(context.Background(), 1, 42, "segunda"); err != nil {
+		t.Fatal(err)
+	}
+	if len(claude.requests) != 3 {
+		t.Fatalf("%d requests, want the refused one, its retry and the next turn", len(claude.requests))
+	}
+
+	for i, req := range claude.requests[1:] {
+		msgs, _ := req["messages"].([]any)
+		raw, _ := json.Marshal(msgs)
+		if strings.Contains(string(raw), `"role":"system"`) {
+			t.Errorf("request %d still carries a system message: %s", i+2, raw)
+		}
+		last := msgs[len(msgs)-1].(map[string]any)
+		if text, _ := json.Marshal(last["content"]); last["role"] != "user" || !strings.Contains(string(text), userNote) {
+			t.Errorf("request %d: the access note is not in the user's turn: %s", i+2, raw)
+		}
+	}
+}
+
+func TestAgentDoesNotRetryOtherBadRequests(t *testing.T) {
+	mcpServer := newFakeServer(t)
+	claude := newFakeClaude(t,
+		badRequest+`{"type":"error","error":{"type":"invalid_request_error","message":"prompt is too long"}}`,
+		message("end_turn", `[{"type":"text","text":"um"}]`),
+	)
+	approvals, _ := newApprovalHarness("", 42, time.Second)
+	agent := newTestAgent(t, claude, mcpServer, approvals)
+
+	if _, err := agent.Ask(context.Background(), 1, 42, "primeira"); err == nil {
+		t.Fatal("expected the turn to fail")
+	}
+	if len(claude.requests) != 1 || agent.accessInUserTurn.Load() {
+		t.Fatalf("a 400 unrelated to system messages was retried in the user's turn: %d requests", len(claude.requests))
 	}
 }
 

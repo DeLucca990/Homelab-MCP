@@ -3,9 +3,7 @@ package containers
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"encoding/binary"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -37,20 +35,6 @@ type ExecResult struct {
 	Truncated  bool  `json:"truncated,omitempty" jsonschema:"true when output was cut at the size limit; what is shown is the beginning of the output"`
 	DurationMS int64 `json:"duration_ms"`
 	TimedOut   bool  `json:"timed_out,omitempty"`
-}
-
-// Fingerprint identifies a (container, command) pair across the confirmation
-// round trip, so what runs is provably what the user approved — otherwise
-// approving `ls` and running `rm` is just a matter of the retry carrying
-// different arguments.
-func Fingerprint(container string, command []string) string {
-	h := sha256.New()
-	h.Write([]byte(container))
-	for _, arg := range command {
-		binary.Write(h, binary.BigEndian, uint32(len(arg)))
-		h.Write([]byte(arg))
-	}
-	return hex.EncodeToString(h.Sum(nil))[:32]
 }
 
 // Exec runs a command inside a container and returns its output. The command is

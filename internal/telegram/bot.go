@@ -53,7 +53,7 @@ func (b *Bot) Run(ctx context.Context) {
 
 	var cmds []models.BotCommand
 	for _, c := range append(toolCommands, otherCommands...) {
-		cmds = append(cmds, models.BotCommand{Command: c.name, Description: c.description})
+		cmds = append(cmds, models.BotCommand{Command: c.name, Description: c.menuDescription()})
 	}
 	if _, err := b.tg.SetMyCommands(ctx, &bot.SetMyCommandsParams{Commands: cmds}); err != nil {
 		log.Printf("telegram: could not publish the command list: %v", err)
@@ -128,7 +128,8 @@ func (b *Bot) onText(ctx context.Context, msg *models.Message) {
 	text, _ := addressed(msg, b.username, b.tg.ID())
 	admin := b.cfg.IsAdmin(msg.From.ID)
 
-	switch name, _ := parseCommand(text); name {
+	name, _, rest := parseCommand(text)
+	switch name {
 	case "":
 		if msg.Chat.Type != models.ChatTypePrivate {
 			text = speaker(msg) + ": " + text
@@ -147,28 +148,46 @@ func (b *Bot) onText(ctx context.Context, msg *models.Message) {
 			b.sendHTML(ctx, chatID, helpText(b.agent != nil, admin))
 			return
 		}
-		b.runCommand(ctx, chatID, msg.From.ID, cmd)
+		b.runCommand(ctx, chatID, msg.From.ID, cmd, rest)
 	}
 }
 
-func (b *Bot) runCommand(ctx context.Context, chatID, userID int64, cmd command) {
+func (b *Bot) runCommand(ctx context.Context, chatID, userID int64, cmd command, rest string) {
+	var args map[string]any
+	if cmd.args != nil {
+		var err error
+		if args, err = cmd.args(rest); err != nil {
+			b.sendHTML(ctx, chatID, "⚠️ "+escape(err.Error())+"\n\nUso: <code>"+escape(cmd.usageLine())+"</code>")
+			return
+		}
+	}
+
 	stop := b.typing(ctx, chatID)
 	defer stop()
 
-	ctx = withRequester(ctx, chatID, userID, b.cfg.IsAdmin(userID))
+	admin := b.cfg.IsAdmin(userID)
+	ctx = withRequester(ctx, chatID, userID, admin)
+	r := requesterOf(ctx)
 	ran := 0
 	for _, name := range cmd.tools {
-		ok, err := b.mcp.HasTool(ctx, name)
+		tool, err := b.mcp.Tool(ctx, name)
 		if err != nil {
 			b.sendError(ctx, chatID, err)
 			return
 		}
-		if !ok {
+		if tool == nil {
 			continue
 		}
 		ran++
 
-		text, isError, err := b.mcp.Call(ctx, name, nil)
+		if !admin && adminOnly(tool) {
+			log.Printf("%s → %s refused: admin only", who(r), name)
+			b.sendHTML(ctx, chatID, "/"+cmd.name+" é só para os administradores deste bot.")
+			continue
+		}
+
+		log.Printf("%s → %s", who(r), name)
+		text, isError, err := b.mcp.Call(ctx, name, args)
 		if err != nil {
 			b.sendError(ctx, chatID, err)
 			continue

@@ -29,7 +29,7 @@ func adminOnly(t *sdk.Tool) bool {
 
 const (
 	adminMark = "Admin only: the bot refuses it unless the sender is one of its admins. "
-	adminNote = "[Bot note: the sender is an admin of this bot.]"
-	userNote  = "[Bot note: the sender is not an admin of this bot. Tools marked Admin only are refused for them: " +
-		"do not offer or attempt those; if they ask for one, say it needs an admin.]"
+	adminNote = "The latest user message was sent by an admin of this bot."
+	userNote  = "The latest user message was sent by someone who is not an admin of this bot. Tools marked Admin only are refused for them: " +
+		"do not offer or attempt those; if they ask for one, say it needs an admin."
 )

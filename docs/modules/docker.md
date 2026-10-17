@@ -97,11 +97,12 @@ request and very different outcomes.
 
 ### 3. The fingerprint
 
-`containers.Fingerprint(container, argv)`, checked on the retry. See
-[ARCHITECTURE §4.2](../ARCHITECTURE.md#42-the-fingerprint) for what it proves,
-and for the one known collision: `docker_container_restart` uses the synthetic
-argv `["restart"]`, which hashes identically to an exec of the literal command
-`restart` in the same container.
+The server's shared `fingerprint` over the tool name, the container and — for
+exec — the argv, checked on the retry. See
+[ARCHITECTURE §4.2](../ARCHITECTURE.md#42-the-fingerprint) for what it proves.
+The tool name is what keeps a restart of `radarr` and an exec of the literal
+command `restart` in `radarr` apart: before both tools used the shared helper,
+they hashed identically.
 
 ---
 

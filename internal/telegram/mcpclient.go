@@ -124,17 +124,18 @@ func (m *MCP) Tools(ctx context.Context) ([]*sdk.Tool, error) {
 	})
 }
 
-func (m *MCP) HasTool(ctx context.Context, name string) (bool, error) {
+// Tool is nil, without an error, for a tool the server did not register.
+func (m *MCP) Tool(ctx context.Context, name string) (*sdk.Tool, error) {
 	tools, err := m.Tools(ctx)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 	for _, t := range tools {
 		if t.Name == name {
-			return true, nil
+			return t, nil
 		}
 	}
-	return false, nil
+	return nil, nil
 }
 
 func (m *MCP) Call(ctx context.Context, name string, args map[string]any) (text string, isError bool, err error) {

@@ -171,15 +171,18 @@ func TestHTMLCutsLongLines(t *testing.T) {
 }
 
 func TestParseCommand(t *testing.T) {
-	for in, want := range map[string][2]string{
-		"/status":             {"status", ""},
-		"/Status@homelab_bot": {"status", "homelab_bot"},
-		"/queue now":          {"queue", ""},
-		"is the disk full?":   {"", ""},
-		"  /help":             {"help", ""},
+	for in, want := range map[string][3]string{
+		"/status":                       {"status", "", ""},
+		"/Status@homelab_bot":           {"status", "homelab_bot", ""},
+		"/queue now":                    {"queue", "", "now"},
+		"is the disk full?":             {"", "", ""},
+		"  /help":                       {"help", "", ""},
+		"/logs jellyfin 50":             {"logs", "", "jellyfin 50"},
+		"/logs@homelab_bot   jellyfin ": {"logs", "homelab_bot", "jellyfin"},
+		"/search\nDuna 2021":            {"search", "", "Duna 2021"},
 	} {
-		if name, target := parseCommand(in); name != want[0] || target != want[1] {
-			t.Errorf("parseCommand(%q) = %q, %q, want %q, %q", in, name, target, want[0], want[1])
+		if name, target, rest := parseCommand(in); name != want[0] || target != want[1] || rest != want[2] {
+			t.Errorf("parseCommand(%q) = %q, %q, %q, want %q, %q, %q", in, name, target, rest, want[0], want[1], want[2])
 		}
 	}
 }

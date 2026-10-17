@@ -41,7 +41,7 @@ func handleExec(
 
 	approved, pending, err := requireApproval(req, approval{
 		message:     confirmationMessage(in),
-		fingerprint: containers.Fingerprint(in.Container, in.Command),
+		fingerprint: execFingerprint(in),
 		refusal:     "command not run",
 		subject:     fmt.Sprintf("exec in %s: %s", in.Container, strings.Join(in.Command, " ")),
 	})
@@ -60,6 +60,10 @@ func handleExec(
 			&sdk.TextContent{Text: renderExecResult(out)},
 		},
 	}, out, nil
+}
+
+func execFingerprint(in execInput) string {
+	return fingerprint(append([]string{"docker_container_exec", in.Container}, in.Command...)...)
 }
 
 func confirmationMessage(in execInput) string {

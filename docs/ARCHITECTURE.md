@@ -25,7 +25,7 @@ sensitive; if you upgrade the SDK, re-read that section against the new code.
 ## 1. Layout
 
 ```
-cmd/server/main.go        .env loading, stdio transport, signal handling
+cmd/server/main.go        .env loading, Streamable HTTP transport, signal handling
 internal/dotenv/          .env → process environment, before registration
 internal/mcp/             protocol layer — registration, handlers, rendering, confirmation,
                           prompts and resources
@@ -421,7 +421,7 @@ if req.Params.RequestState != a.fingerprint {
 }
 ```
 
-There are two implementations. The generic one, `internal/mcp/confirm.go`:
+One implementation, `internal/mcp/confirm.go`, used by every action tool:
 
 ```go
 func fingerprint(parts ...string) string {
@@ -434,9 +434,13 @@ func fingerprint(parts ...string) string {
 }
 ```
 
-Callers pass the tool name as the first part. The older
-`containers.Fingerprint(container, argv)` predates it and does not mix the tool
-name in; the two want unifying.
+Callers pass the tool name as the first part, so an approval given for one tool
+cannot satisfy another. That is not hypothetical: the Docker tools once had a
+helper of their own that hashed `(container, argv)` without the tool name, and
+`docker_container_restart` passed it the synthetic argv `["restart"]` — the same
+fingerprint as an exec of the literal command `restart` in the same container.
+Both now go through `fingerprint`, and `internal/mcp/confirm_test.go` holds
+them apart.
 
 **Why the length prefixes.** Concatenating the parts would make `["rm","-rf"]`
 and `["rm-rf"]` hash identically — the boundary between two values is semantic,
@@ -448,6 +452,7 @@ unambiguous.
 |---|---|
 | `["rm","-rf"]` vs `["rm-rf"]` | different |
 | `("ab",["x"])` vs `("a",["bx"])` | different |
+| `docker_container_restart radarr` vs `docker_container_exec radarr restart` | different |
 | output width | 32 hex chars = 128 bits |
 
 **Why 128 bits.** The property that matters is second-preimage resistance —
@@ -465,13 +470,6 @@ that was shown to the human.
   replayed a stored `RequestState` for an identical operation would pass. In
   practice `RequestState` is protocol-level and constructed by the client, not by
   the model — but the server does not enforce that.
-- **Not the tool identity, for the Docker tools.** `containers.Fingerprint`
-  covers `(container, argv)` only, and `docker_container_restart` uses the
-  synthetic argv `["restart"]`, which **collides with an exec of the literal
-  command `restart` in the same container** — verified: both produce
-  `60139298fc75342a03fa46ad79c8117c` for `radarr`. Not currently reachable,
-  because a well-behaved client builds `RequestState` itself and the model never
-  chooses it. Closing it is one line: use the generic helper.
 - **Not the user's identity.** The server knows a decision came back through the
   session. It has no idea who made it.
 

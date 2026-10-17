@@ -14,7 +14,7 @@ func addressed(msg *models.Message, username string, botID int64) (string, bool)
 		return text, true
 	}
 
-	if name, target := parseCommand(text); name != "" {
+	if name, target, _ := parseCommand(text); name != "" {
 		return text, target == "" || strings.EqualFold(target, username)
 	}
 

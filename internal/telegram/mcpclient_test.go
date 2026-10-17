@@ -35,30 +35,8 @@ func newFakeServer(t *testing.T) *fakeServer {
 	write := func(ctx context.Context, req *sdk.CallToolRequest, in struct {
 		Target string `json:"target"`
 	}) (*sdk.CallToolResult, any, error) {
-		params := req.Session.InitializeParams()
-		canConfirm := params != nil && params.Capabilities != nil && params.Capabilities.Elicitation != nil
-
-		if len(req.Params.InputResponses) == 0 {
-			if !canConfirm {
-				return nil, nil, errors.New("this client cannot show a confirmation")
-			}
-			return &sdk.CallToolResult{
-				InputRequests: sdk.InputRequestMap{
-					"confirm": &sdk.ElicitParams{
-						Message:         "Restart " + in.Target + "?",
-						RequestedSchema: map[string]any{"type": "object", "properties": map[string]any{}},
-					},
-				},
-				RequestState: "fp-" + in.Target,
-			}, nil, nil
-		}
-
-		res, _ := req.Params.InputResponses["confirm"].(*sdk.ElicitResult)
-		if res == nil || res.Action != "accept" {
-			return nil, nil, errors.New("the user declined it")
-		}
-		if req.Params.RequestState != "fp-"+in.Target {
-			return nil, nil, errors.New("the approved operation does not match")
+		if pending, err := confirmed(req, "Restart "+in.Target+"?", "fp-"+in.Target); pending != nil || err != nil {
+			return pending, nil, err
 		}
 		f.writes.Add(1)
 		return &sdk.CallToolResult{Content: []sdk.Content{&sdk.TextContent{Text: "restarted " + in.Target}}}, nil, nil
@@ -105,6 +83,36 @@ func newFakeServer(t *testing.T) *fakeServer {
 	}))
 	t.Cleanup(f.Close)
 	return f
+}
+
+// confirmed asks for and checks a confirmation the way internal/mcp/confirm.go
+// does: a pending result on the first pass, an error for anything short of an
+// accept of the same operation, and neither once it may go ahead.
+func confirmed(req *sdk.CallToolRequest, question, state string) (*sdk.CallToolResult, error) {
+	if len(req.Params.InputResponses) == 0 {
+		params := req.Session.InitializeParams()
+		if params == nil || params.Capabilities == nil || params.Capabilities.Elicitation == nil {
+			return nil, errors.New("this client cannot show a confirmation")
+		}
+		return &sdk.CallToolResult{
+			InputRequests: sdk.InputRequestMap{
+				"confirm": &sdk.ElicitParams{
+					Message:         question,
+					RequestedSchema: map[string]any{"type": "object", "properties": map[string]any{}},
+				},
+			},
+			RequestState: state,
+		}, nil
+	}
+
+	res, _ := req.Params.InputResponses["confirm"].(*sdk.ElicitResult)
+	if res == nil || res.Action != "accept" {
+		return nil, errors.New("the user declined it")
+	}
+	if req.Params.RequestState != state {
+		return nil, errors.New("the approved operation does not match")
+	}
+	return nil, nil
 }
 
 func TestMCPCallsReadTool(t *testing.T) {

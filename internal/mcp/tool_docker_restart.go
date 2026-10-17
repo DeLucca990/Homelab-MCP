@@ -35,7 +35,7 @@ func handleRestart(
 				"It will be stopped and started again. Anything it serves goes "+
 				"offline for the duration, and unsaved in-flight work is lost.",
 			in.Container),
-		fingerprint: containers.Fingerprint(in.Container, []string{"restart"}),
+		fingerprint: restartFingerprint(in),
 		refusal:     "container not restarted",
 		subject:     fmt.Sprintf("restart %s", in.Container),
 	})
@@ -53,6 +53,10 @@ func handleRestart(
 			&sdk.TextContent{Text: renderRestartResult(out)},
 		},
 	}, out, nil
+}
+
+func restartFingerprint(in restartInput) string {
+	return fingerprint("docker_container_restart", in.Container)
 }
 
 func renderRestartResult(r containers.RestartResult) string {

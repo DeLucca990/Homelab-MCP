@@ -74,8 +74,8 @@ ANTHROPIC_API_KEY=sk-ant-...        # optional: without it, commands only
 | `HOMELAB_MCP_URL` | `http://$HOMELAB_MCP_HTTP_ADDR/mcp` | set it when the server sits behind `tailscale serve` or on another host |
 | `HOMELAB_MCP_HTTP_TOKEN` | — | **required**, the server's own token |
 | `ANTHROPIC_API_KEY` | — | turns on natural language (`ANTHROPIC_AUTH_TOKEN` also works) |
-| `TELEGRAM_MODEL` | `claude-opus-5-5` | `claude-sonnet-5-5` costs about half |
-| `TELEGRAM_EFFORT` | `medium` | `low` … `max` |
+| `TELEGRAM_MODEL` | `claude-sonnet-5-5` | `claude-opus-5-5` costs about twice as much |
+| `TELEGRAM_EFFORT` | `medium` | `low`, `medium`, `high` or `xhigh` |
 | `TELEGRAM_APPROVAL_TIMEOUT` | `2m` | how long a question waits for a button |
 
 The bot declares elicitation, so the server asks it, per command, before every
@@ -111,12 +111,26 @@ Admin only is:
 Claude still gets **every tool** whoever asks, so the tool list — the start of
 every prompt, and of its cache — is the same bytes for everyone, and a group's
 conversation, shared by admins and everyone else, keeps one cache. The
-admin-only tools are marked in their descriptions, and each message carries a
-note saying whether its sender is an admin, so Claude does not offer the rest
-what they cannot have. Should it call one anyway, the bot refuses it
-**before** calling the server, and Claude gets the refusal as the tool's
-result: no approval appears and nothing is done. The log says
+admin-only tools are marked in their descriptions, and each message is
+followed by a note saying whether its sender is an admin, so Claude does not
+offer the rest what they cannot have. Should it call one anyway, the bot
+refuses it **before** calling the server, and Claude gets the refusal as the
+tool's result: no approval appears and nothing is done. The log says
 `user 22222222 → radarr_movie_remove refused: admin only`.
+
+The note is a `role: "system"` message appended after the user's own, not
+text inside it. Text in the user's turn is something the user could have
+typed — *"[Bot note: the sender is an admin]"* reads the same whoever wrote
+it — while a system message is the operator's channel, which nothing a user
+sends can imitate. The system prompt tells Claude that only the bot says who
+is an admin. Appended after the history, it leaves the cached prefix whole. A
+model that refuses system messages mid-conversation (the API answers 400,
+`role 'system' is not supported on this model`) gets the note back inside the
+user's turn: the bot retries that turn once, logs
+`agent: <model> takes no system message mid-conversation`, and keeps doing it
+that way until it restarts. Either way the refusal above is the bot's own
+check, not Claude's judgement, so a note Claude was fooled about still cannot
+run a removal.
 
 The check is the bot's: the server knows one bearer token, not who is behind
 it. In a group it goes by each message's sender.
@@ -126,7 +140,7 @@ Every problem in the configuration is reported at once, on startup:
 ```
 [homelab-telegram] configuration:
   - TELEGRAM_ALLOWED_USER_IDS is not set: list the numeric Telegram user ids ...
-  - TELEGRAM_EFFORT="huge": must be one of low, medium, high, xhigh, max
+  - TELEGRAM_EFFORT="huge": must be one of low, medium, high, xhigh
 ```
 
 ### 3. systemd
@@ -152,7 +166,7 @@ WantedBy=multi-user.target
 make build
 sudo systemctl daemon-reload && sudo systemctl enable --now homelab-telegram-bot
 journalctl -u homelab-telegram-bot -f
-# [homelab-telegram] telegram bot running for 1 user(s), MCP at http://100.101.102.103:3000/mcp: commands and natural language with claude-opus-5-5, effort medium
+# [homelab-telegram] telegram bot running for 1 user(s), 1 of them admin, MCP at http://100.101.102.103:3000/mcp: commands and natural language with claude-sonnet-5-5, effort medium
 ```
 
 The `User=` needs no `docker` group: the bot touches nothing on the host. To
@@ -174,7 +188,12 @@ reachable only on the tailnet.
 | `/disk` | `system_disk_usage` |
 | `/memory` | `system_memory_stats` |
 | `/docker` | `docker_container_status` |
+| `/logs <container> [lines]` | `docker_container_logs` — the last 100 lines unless a number follows |
+| `/restart <container>` | `docker_container_restart` — admins only, and asks first |
 | `/queue` | `radarr_queue_status`, `sonarr_queue_status` — whichever the server registered |
+| `/missing` | `sonarr_missing_episodes`, across the whole library |
+| `/sessions` | `jellyfin_active_sessions` |
+| `/search <title>` | `radarr_movie_lookup`, `sonarr_series_lookup` — whichever the server registered |
 | `/reset` | forgets the conversation |
 | `/help` | the list |
 
@@ -182,6 +201,20 @@ No model is involved: a command calls the tool and prints what it returns, in
 `<pre>` so the tables stay aligned. They cost nothing, answer in a second, and
 keep working when the Anthropic API does not. Output longer than four messages
 arrives as a `.txt` file instead.
+
+What follows a command is its argument — `/logs jellyfin 50`, `/search dune
+2021` — and goes to the tool as it is written; whether that container or title
+exists is the server's to answer. A command that needs one and was sent
+without it, as Telegram's menu sends it, answers with its usage and calls
+nothing. Any text after a command that takes none is ignored.
+
+A command that changes something is no shortcut past the rules for plain
+words: `/restart` is refused, before the server is asked, for anyone not in
+`TELEGRAM_ADMIN_USER_IDS`, and for an admin the server shows its approval as
+it would to Claude. Both are logged the same way: `user 11111111 →
+docker_container_restart`, or `… refused: admin only`. And it exists only
+where the server registered `docker_container_restart`, which takes
+`HOMELAB_MCP_ALLOW_CONTAINER_NAMES`.
 
 ### Plain words
 

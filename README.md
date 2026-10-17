@@ -214,8 +214,9 @@ The mechanism, and what the fingerprint does and does not protect:
 ## On Telegram
 
 `bin/telegram-bot` is a second binary that puts the server in a Telegram chat: `/status`,
-`/disk`, `/docker`, `/queue` call their tool directly, and anything else — *"why hasn't Dune
-downloaded?"* — goes to Claude with every tool the server registered. It is an MCP client like
+`/disk`, `/queue`, `/logs jellyfin`, `/search dune` and the rest call their tool directly, and
+anything else — *"why hasn't Dune downloaded?"* — goes to Claude with every tool the server
+registered. It is an MCP client like
 any other, so approvals still come from the server, per command: they arrive as a message with
 **Aprovar** / **Recusar** buttons. Long polling, so it needs no inbound port.
 
