@@ -340,6 +340,9 @@ func TestScheduledDigestSendsAndRecords(t *testing.T) {
 	if !strings.Contains(got, "• Severance — S02E04, S02E05") {
 		t.Errorf("no body:\n%s", got)
 	}
+	if !strings.Contains(got, "<i>manchete: ≈ US$ 0,0000 · 2 tokens: 1 entrada, 1 saída</i>") {
+		t.Errorf("the headline's cost is not at the foot of the digest:\n%s", got)
+	}
 
 	req := claude.requests[0]
 	if req["model"] != defaultDigestModel || req["fallbacks"] != nil {
@@ -390,8 +393,27 @@ func TestDigestGoesWithoutAFailedHeadline(t *testing.T) {
 
 	b.sendDigest(context.Background(), []int64{42}, true)
 
-	if got := api.texts(); !strings.Contains(got, "• Severance — S02E04, S02E05") {
+	got := api.texts()
+	if !strings.Contains(got, "• Severance — S02E04, S02E05") {
 		t.Errorf("a failed headline held the digest back:\n%s", got)
+	}
+	if strings.Contains(got, "manchete") {
+		t.Errorf("a request that never answered was given a cost:\n%s", got)
+	}
+}
+
+func TestRefusedHeadlineStillShowsItsCost(t *testing.T) {
+	claude := newFakeClaude(t, `{"id":"msg","type":"message","role":"assistant","model":"claude-haiku-5-5",`+
+		`"content":[],"stop_reason":"refusal","stop_details":{"type":"refusal","category":"cyber"},`+
+		`"stop_sequence":null,"usage":{"input_tokens":1000,"output_tokens":10}}`)
+	b, api := newDigestBot(t, newDigestServer(t, fullDigest()), claude)
+
+	b.sendDigest(context.Background(), []int64{42}, false)
+
+	got := api.texts()
+	if strings.Contains(got, "<i>O ") || !strings.Contains(got,
+		"<i>manchete que falhou: ≈ US$ 0,0001 · 1.010 tokens: 1.000 entrada, 10 saída</i>") {
+		t.Errorf("a refused headline should go unwritten but billed:\n%s", got)
 	}
 }
 

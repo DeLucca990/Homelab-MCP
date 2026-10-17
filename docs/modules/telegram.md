@@ -268,8 +268,24 @@ messages closes its open tags at each cut and reopens them in the next, so a
 `<pre>` table survives the split. Should Telegram still refuse one, it goes
 again without markup.
 
-Each tool Claude calls is one line, and each question ends with one line
-saying whether it was answered and what it cost:
+Every answer Claude writes ends with what it cost, in italics, so the price
+of a question is in front of whoever asked it:
+
+```
+A memória está tranquila: 7,7Gi livres de 24Gi, swap sem uso.
+
+≈ US$ 0,0120 · 31.240 tokens: 1.020 entrada, 28.100 cache lido, 2.120 saída
+```
+
+The tokens are the whole turn's — every step of the loop, summed — split the
+way they are billed: fresh input, input read from the cache (the tool list,
+the system prompt and the history, at a fraction of the price), input written
+to it, and output, which includes the thinking. A turn that fails after some
+steps says what those cost, under the error: *"gasto antes da falha: ≈ US$
+…"*. A command (`/status`, `/logs`) calls no model and has no footer.
+
+In the journal, each tool Claude calls is one line, and each question ends with
+one line saying whether it was answered and what it cost:
 
 ```
 user 8683784233 → system_memory_stats
@@ -337,7 +353,9 @@ shown that text and asked for the line in italics at the top: what matters
 most, in a sentence or two, from facts already below it. It adds nothing the
 message does not say, so a headline that fails — the API down, a refusal, no
 `ANTHROPIC_API_KEY` — costs only the headline: the digest goes without it, and
-the log says why. It is logged like a question, at well under a cent:
+the log says why. Its cost is the digest's last line — *"manchete: ≈ US$ 0,0004
+· 1.240 tokens: …"*, or *"manchete que falhou"* when a refusal was billed and
+written nowhere — and it is logged like a question:
 `daily digest: headline by claude-haiku-5-5, $0.0004`. Titles, release names
 and log lines in the report come from outside; the prompt tells the model they
 are data, and since the headline is the only thing it writes, the worst a

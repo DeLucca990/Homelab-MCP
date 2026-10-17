@@ -261,8 +261,15 @@ func (b *Bot) digestText(ctx context.Context, state digestState, now time.Time) 
 	body := renderDigest(d, state, now)
 	headline := ""
 	if b.headliner != nil {
-		if headline, err = b.headliner.headline(ctx, plainText(parseHTML(body))); err != nil {
+		var used spend
+		headline, used, err = b.headliner.headline(ctx, plainText(parseHTML(body)))
+		label := "manchete"
+		if err != nil {
 			log.Printf("daily digest: going out without a headline: %v", err)
+			label = "manchete que falhou"
+		}
+		if used.steps > 0 {
+			body += "\n\n" + usageLine(used, label)
 		}
 	}
 	return digestMessage(now, headline, body), &d.Totals, nil
@@ -640,7 +647,7 @@ func newHeadliner(model string, opts ...option.RequestOption) *headliner {
 	return &headliner{client: anthropic.NewClient(opts...), model: model}
 }
 
-func (h *headliner) headline(ctx context.Context, report string) (string, error) {
+func (h *headliner) headline(ctx context.Context, report string) (string, spend, error) {
 	resp, err := h.client.Beta.Messages.New(ctx, anthropic.BetaMessageNewParams{
 		Model:        h.model,
 		MaxTokens:    2048,
@@ -649,7 +656,7 @@ func (h *headliner) headline(ctx context.Context, report string) (string, error)
 		OutputConfig: anthropic.BetaOutputConfigParam{Effort: anthropic.BetaOutputConfigEffort("low")},
 	})
 	if err != nil {
-		return "", fmt.Errorf("claude: %w", err)
+		return "", spend{}, fmt.Errorf("claude: %w", err)
 	}
 
 	sp := spendOf(resp)
@@ -661,9 +668,9 @@ func (h *headliner) headline(ctx context.Context, report string) (string, error)
 
 	switch resp.StopReason {
 	case anthropic.BetaStopReasonRefusal:
-		return "", fmt.Errorf("%s declined to write it (%s)", resp.Model, resp.StopDetails.Category)
+		return "", sp, fmt.Errorf("%s declined to write it (%s)", resp.Model, resp.StopDetails.Category)
 	case anthropic.BetaStopReasonMaxTokens:
-		return "", fmt.Errorf("%s ran out of tokens", resp.Model)
+		return "", sp, fmt.Errorf("%s ran out of tokens", resp.Model)
 	}
 
 	var parts []string
@@ -674,10 +681,10 @@ func (h *headliner) headline(ctx context.Context, report string) (string, error)
 	}
 	text := strings.Join(strings.Fields(strings.Join(parts, " ")), " ")
 	if text == "" {
-		return "", fmt.Errorf("%s wrote nothing", resp.Model)
+		return "", sp, fmt.Errorf("%s wrote nothing", resp.Model)
 	}
 	if utf8.RuneCountInString(text) > headlineRunes {
 		text = string([]rune(text)[:headlineRunes-1]) + "…"
 	}
-	return text, nil
+	return text, sp, nil
 }

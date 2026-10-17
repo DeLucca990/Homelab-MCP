@@ -116,3 +116,15 @@ func TestSpendCountsStepsAndModels(t *testing.T) {
 		t.Errorf("other models: %v", got)
 	}
 }
+
+func TestUsageLine(t *testing.T) {
+	s := spend{input: 1020, cacheRead: 12100, output: 2114, usd: 0.01234}
+	if got, want := usageLine(s, ""), "<i>≈ US$ 0,0123 · 15.234 tokens: 1.020 entrada, 12.100 cache lido, 2.114 saída</i>"; got != want {
+		t.Errorf("got  %s\nwant %s", got, want)
+	}
+
+	s = spend{input: 5, cacheWrite: 1000000, output: 5, unpriced: []string{"claude-future-9"}}
+	if got, want := usageLine(s, "manchete"), "<i>manchete: ≈ US$ 0,0000 (sem preço para claude-future-9) · 1.000.010 tokens: 5 entrada, 1.000.000 cache gravado, 5 saída</i>"; got != want {
+		t.Errorf("got  %s\nwant %s", got, want)
+	}
+}

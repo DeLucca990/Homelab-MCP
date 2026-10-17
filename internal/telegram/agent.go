@@ -138,11 +138,12 @@ func (a *Agent) systemText(ctx context.Context) string {
 }
 
 // errBusy: an approval can hold a turn open for minutes, and interleaved turns
-// would corrupt the history.
-func (a *Agent) Ask(ctx context.Context, chatID, userID int64, text string) (string, error) {
+// would corrupt the history. The spend is the turn's, failed or not: every
+// step before a failure was billed.
+func (a *Agent) Ask(ctx context.Context, chatID, userID int64, text string) (string, spend, error) {
 	conv := a.conversation(chatID)
 	if !conv.mu.TryLock() {
-		return "", errBusy
+		return "", spend{}, errBusy
 	}
 	defer conv.mu.Unlock()
 
@@ -163,7 +164,7 @@ func (a *Agent) Ask(ctx context.Context, chatID, userID int64, text string) (str
 
 	tools, everyone, err := a.tools(ctx)
 	if err != nil {
-		return "", err
+		return "", spend{}, err
 	}
 
 	// Roll back a failed turn so history never ends on an unanswered tool call.
@@ -185,9 +186,9 @@ func (a *Agent) Ask(ctx context.Context, chatID, userID int64, text string) (str
 	a.logSpend(chatID, userID, turn, err)
 	if err != nil {
 		conv.messages = conv.messages[:start]
-		return "", err
+		return "", turn, err
 	}
-	return note + answer, nil
+	return note + answer, turn, nil
 }
 
 func (a *Agent) question(text string, admin bool) (msgs []anthropic.BetaMessageParam, asSystem bool) {

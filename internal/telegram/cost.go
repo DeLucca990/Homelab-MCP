@@ -1,6 +1,8 @@
 package telegram
 
 import (
+	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/anthropics/anthropic-sdk-go"
@@ -104,6 +106,52 @@ func spendOf(resp *anthropic.BetaMessage) spend {
 			it.CacheCreationInputTokens, it.CacheCreation.Ephemeral5mInputTokens, it.CacheCreation.Ephemeral1hInputTokens))
 	}
 	return total
+}
+
+func usageLine(s spend, label string) string {
+	categories := []struct {
+		tokens int64
+		name   string
+	}{
+		{s.input, "entrada"},
+		{s.cacheRead, "cache lido"},
+		{s.cacheWrite, "cache gravado"},
+		{s.output, "saída"},
+	}
+
+	var total int64
+	var parts []string
+	for _, c := range categories {
+		if c.tokens > 0 {
+			total += c.tokens
+			parts = append(parts, thousands(c.tokens)+" "+c.name)
+		}
+	}
+
+	line := "≈ US$ " + strings.Replace(fmt.Sprintf("%.4f", s.usd), ".", ",", 1)
+	if len(s.unpriced) > 0 {
+		line += " (sem preço para " + strings.Join(s.unpriced, ", ") + ")"
+	}
+	if total > 0 {
+		line += " · " + thousands(total) + " tokens: " + strings.Join(parts, ", ")
+	}
+	if label != "" {
+		line = label + ": " + line
+	}
+	return "<i>" + escape(line) + "</i>"
+}
+
+// thousands writes n the Brazilian way, 12.345.
+func thousands(n int64) string {
+	digits := strconv.FormatInt(n, 10)
+	var b strings.Builder
+	for i, d := range digits {
+		if i > 0 && (len(digits)-i)%3 == 0 {
+			b.WriteByte('.')
+		}
+		b.WriteRune(d)
+	}
+	return b.String()
 }
 
 func priced(model string, input, output, cacheRead, cacheWrite, write5m, write1h int64) spend {

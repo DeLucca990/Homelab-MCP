@@ -236,16 +236,21 @@ func (b *Bot) ask(ctx context.Context, chatID, userID int64, text string) {
 	}
 
 	stop := b.typing(ctx, chatID)
-	answer, err := b.agent.Ask(ctx, chatID, userID, text)
+	answer, used, err := b.agent.Ask(ctx, chatID, userID, text)
 	stop()
 
 	switch {
 	case errors.Is(err, errBusy):
 		b.sendHTML(ctx, chatID, "Ainda estou no pedido anterior — talvez esperando uma aprovação sua.")
 	case err != nil:
-		b.sendError(ctx, chatID, err)
+		log.Printf("chat %d: %v", chatID, err)
+		message := "⚠️ " + escape(err.Error())
+		if used.steps > 0 {
+			message += "\n\n" + usageLine(used, "gasto antes da falha")
+		}
+		b.sendHTML(ctx, chatID, message)
 	default:
-		b.sendReply(ctx, chatID, answer)
+		b.sendReply(ctx, chatID, answer+"\n\n"+usageLine(used, ""))
 	}
 }
 

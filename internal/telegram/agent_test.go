@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/anthropics/anthropic-sdk-go/option"
+	"github.com/go-telegram/bot"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -80,9 +81,12 @@ func TestAgentRunsApprovedWrite(t *testing.T) {
 	approvals, tg := newApprovalHarness("y", 42, time.Second)
 	agent := newTestAgent(t, claude, mcpServer, approvals)
 
-	answer, err := agent.Ask(context.Background(), 1, 42, "reinicia o jellyfin")
+	answer, used, err := agent.Ask(context.Background(), 1, 42, "reinicia o jellyfin")
 	if err != nil {
 		t.Fatal(err)
+	}
+	if used.steps != 2 || used.input != 2 || used.output != 2 || !near(used.usd, 2*(4+20)/1e6) {
+		t.Errorf("the turn's spend did not come back with the answer: %+v", used)
 	}
 	if answer != "Reiniciei o <b>jellyfin</b>." {
 		t.Errorf("answer: %q", answer)
@@ -138,7 +142,7 @@ func TestAgentReportsDeclinedWriteToClaude(t *testing.T) {
 	approvals, _ := newApprovalHarness("n", 42, time.Second)
 	agent := newTestAgent(t, claude, mcpServer, approvals)
 
-	if _, err := agent.Ask(context.Background(), 1, 42, "reinicia o jellyfin"); err != nil {
+	if _, _, err := agent.Ask(context.Background(), 1, 42, "reinicia o jellyfin"); err != nil {
 		t.Fatal(err)
 	}
 	if mcpServer.writes.Load() != 0 {
@@ -160,7 +164,7 @@ func TestAgentRefusesAdminToolForUser(t *testing.T) {
 	approvals, tg := newApprovalHarness("y", 42, time.Second)
 	agent := newTestAgent(t, claude, mcpServer, approvals)
 
-	if _, err := agent.Ask(context.Background(), 1, 42, "remove o dune"); err != nil {
+	if _, _, err := agent.Ask(context.Background(), 1, 42, "remove o dune"); err != nil {
 		t.Fatal(err)
 	}
 	if mcpServer.writes.Load() != 0 || len(tg.sent) != 0 {
@@ -186,7 +190,7 @@ func TestAgentAdminRunsAdminTool(t *testing.T) {
 	agent := newTestAgent(t, claude, mcpServer, approvals)
 	agent.isAdmin = Config{AdminUsers: map[int64]bool{42: true}}.IsAdmin
 
-	if _, err := agent.Ask(context.Background(), 1, 42, "remove o dune"); err != nil {
+	if _, _, err := agent.Ask(context.Background(), 1, 42, "remove o dune"); err != nil {
 		t.Fatal(err)
 	}
 	if mcpServer.writes.Load() != 1 || len(tg.sent) != 1 {
@@ -224,7 +228,7 @@ func TestAgentReadsResource(t *testing.T) {
 	approvals, _ := newApprovalHarness("", 42, time.Second)
 	agent := newTestAgent(t, claude, mcpServer, approvals)
 
-	if _, err := agent.Ask(context.Background(), 1, 42, "quais perfis existem?"); err != nil {
+	if _, _, err := agent.Ask(context.Background(), 1, 42, "quais perfis existem?"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -247,8 +251,12 @@ func TestAgentRollsBackFailedTurn(t *testing.T) {
 	approvals, _ := newApprovalHarness("", 42, time.Second)
 	agent := newTestAgent(t, claude, mcpServer, approvals)
 
-	if _, err := agent.Ask(context.Background(), 1, 42, "como está?"); err == nil {
+	_, used, err := agent.Ask(context.Background(), 1, 42, "como está?")
+	if err == nil {
 		t.Fatal("expected the turn to fail")
+	}
+	if used.steps != 1 {
+		t.Errorf("the step billed before the failure was not returned: %+v", used)
 	}
 	if n := len(agent.conversation(1).messages); n != 0 {
 		t.Fatalf("%d messages left behind by a failed turn", n)
@@ -321,11 +329,11 @@ func TestAgentPutsAccessInUserTurnWhenSystemRoleRefused(t *testing.T) {
 	approvals, _ := newApprovalHarness("", 42, time.Second)
 	agent := newTestAgent(t, claude, mcpServer, approvals)
 
-	answer, err := agent.Ask(context.Background(), 1, 42, "primeira")
+	answer, _, err := agent.Ask(context.Background(), 1, 42, "primeira")
 	if err != nil || answer != "um" {
 		t.Fatalf("the refused turn was not retried: %q, %v", answer, err)
 	}
-	if _, err := agent.Ask(context.Background(), 1, 42, "segunda"); err != nil {
+	if _, _, err := agent.Ask(context.Background(), 1, 42, "segunda"); err != nil {
 		t.Fatal(err)
 	}
 	if len(claude.requests) != 3 {
@@ -354,11 +362,54 @@ func TestAgentDoesNotRetryOtherBadRequests(t *testing.T) {
 	approvals, _ := newApprovalHarness("", 42, time.Second)
 	agent := newTestAgent(t, claude, mcpServer, approvals)
 
-	if _, err := agent.Ask(context.Background(), 1, 42, "primeira"); err == nil {
+	if _, _, err := agent.Ask(context.Background(), 1, 42, "primeira"); err == nil {
 		t.Fatal("expected the turn to fail")
 	}
 	if len(claude.requests) != 1 || agent.accessInUserTurn.Load() {
 		t.Fatalf("a 400 unrelated to system messages was retried in the user's turn: %d requests", len(claude.requests))
+	}
+}
+
+func newAskBot(t *testing.T, claude *fakeClaude) (*Bot, *fakeBotAPI) {
+	t.Helper()
+	api := newFakeBotAPI(t)
+	tg, err := bot.New("123:test", bot.WithServerURL(api.URL), bot.WithSkipGetMe())
+	if err != nil {
+		t.Fatal(err)
+	}
+	approvals, _ := newApprovalHarness("", 42, time.Second)
+	return &Bot{agent: newTestAgent(t, claude, newFakeServer(t), approvals), tg: tg}, api
+}
+
+func TestAnswerEndsWithItsCost(t *testing.T) {
+	claude := newFakeClaude(t,
+		message("tool_use", `[{"type":"tool_use","id":"tu_1","name":"read_thing","input":{}}]`),
+		message("end_turn", `[{"type":"text","text":"Tudo certo."}]`),
+	)
+	b, api := newAskBot(t, claude)
+
+	b.ask(context.Background(), 1, 42, "como está?")
+
+	// Two steps at claude-opus-5-5's rates: 2 tokens in at $4, 2 out at $20.
+	want := "Tudo certo.\n\n<i>≈ US$ 0,0000 · 4 tokens: 2 entrada, 2 saída</i>"
+	if got := api.texts(); got != want {
+		t.Errorf("got  %q\nwant %q", got, want)
+	}
+}
+
+func TestFailedTurnShowsWhatItCost(t *testing.T) {
+	claude := newFakeClaude(t,
+		message("tool_use", `[{"type":"tool_use","id":"tu_1","name":"read_thing","input":{}}]`),
+		// the script runs out: the second request fails
+	)
+	b, api := newAskBot(t, claude)
+
+	b.ask(context.Background(), 1, 42, "como está?")
+
+	got := api.texts()
+	if !strings.HasPrefix(got, "⚠️ claude:") ||
+		!strings.HasSuffix(got, "<i>gasto antes da falha: ≈ US$ 0,0000 · 2 tokens: 1 entrada, 1 saída</i>") {
+		t.Errorf("the failure did not say what it cost: %q", got)
 	}
 }
 
@@ -368,7 +419,7 @@ func TestAgentBusyWhileTurnInProgress(t *testing.T) {
 	conv.mu.Lock()
 	defer conv.mu.Unlock()
 
-	if _, err := agent.Ask(context.Background(), 1, 42, "oi"); err != errBusy {
+	if _, _, err := agent.Ask(context.Background(), 1, 42, "oi"); err != errBusy {
 		t.Fatalf("got %v, want errBusy", err)
 	}
 }
