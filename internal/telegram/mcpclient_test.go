@@ -11,7 +11,9 @@ import (
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// fakeServer gates write_thing the way internal/mcp/confirm.go gates every write.
+// fakeServer gates its writes the way internal/mcp/confirm.go gates every write.
+// write_thing adds and remove_thing destroys, like radarr_movie_add and
+// radarr_movie_remove: the line the bot draws between users and admins.
 type fakeServer struct {
 	*httptest.Server
 	writes atomic.Int32
@@ -25,43 +27,45 @@ func newFakeServer(t *testing.T) *fakeServer {
 
 	server := sdk.NewServer(&sdk.Implementation{Name: "fake", Version: "1"}, nil)
 
-	sdk.AddTool(server, &sdk.Tool{Name: "read_thing"},
+	sdk.AddTool(server, &sdk.Tool{Name: "read_thing", Annotations: &sdk.ToolAnnotations{ReadOnlyHint: true}},
 		func(ctx context.Context, req *sdk.CallToolRequest, _ struct{}) (*sdk.CallToolResult, any, error) {
 			return &sdk.CallToolResult{Content: []sdk.Content{&sdk.TextContent{Text: "all good"}}}, nil, nil
 		})
 
-	sdk.AddTool(server, &sdk.Tool{Name: "write_thing"},
-		func(ctx context.Context, req *sdk.CallToolRequest, in struct {
-			Target string `json:"target"`
-		}) (*sdk.CallToolResult, any, error) {
-			params := req.Session.InitializeParams()
-			canConfirm := params != nil && params.Capabilities != nil && params.Capabilities.Elicitation != nil
+	write := func(ctx context.Context, req *sdk.CallToolRequest, in struct {
+		Target string `json:"target"`
+	}) (*sdk.CallToolResult, any, error) {
+		params := req.Session.InitializeParams()
+		canConfirm := params != nil && params.Capabilities != nil && params.Capabilities.Elicitation != nil
 
-			if len(req.Params.InputResponses) == 0 {
-				if !canConfirm {
-					return nil, nil, errors.New("this client cannot show a confirmation")
-				}
-				return &sdk.CallToolResult{
-					InputRequests: sdk.InputRequestMap{
-						"confirm": &sdk.ElicitParams{
-							Message:         "Restart " + in.Target + "?",
-							RequestedSchema: map[string]any{"type": "object", "properties": map[string]any{}},
-						},
+		if len(req.Params.InputResponses) == 0 {
+			if !canConfirm {
+				return nil, nil, errors.New("this client cannot show a confirmation")
+			}
+			return &sdk.CallToolResult{
+				InputRequests: sdk.InputRequestMap{
+					"confirm": &sdk.ElicitParams{
+						Message:         "Restart " + in.Target + "?",
+						RequestedSchema: map[string]any{"type": "object", "properties": map[string]any{}},
 					},
-					RequestState: "fp-" + in.Target,
-				}, nil, nil
-			}
+				},
+				RequestState: "fp-" + in.Target,
+			}, nil, nil
+		}
 
-			res, _ := req.Params.InputResponses["confirm"].(*sdk.ElicitResult)
-			if res == nil || res.Action != "accept" {
-				return nil, nil, errors.New("the user declined it")
-			}
-			if req.Params.RequestState != "fp-"+in.Target {
-				return nil, nil, errors.New("the approved operation does not match")
-			}
-			f.writes.Add(1)
-			return &sdk.CallToolResult{Content: []sdk.Content{&sdk.TextContent{Text: "restarted " + in.Target}}}, nil, nil
-		})
+		res, _ := req.Params.InputResponses["confirm"].(*sdk.ElicitResult)
+		if res == nil || res.Action != "accept" {
+			return nil, nil, errors.New("the user declined it")
+		}
+		if req.Params.RequestState != "fp-"+in.Target {
+			return nil, nil, errors.New("the approved operation does not match")
+		}
+		f.writes.Add(1)
+		return &sdk.CallToolResult{Content: []sdk.Content{&sdk.TextContent{Text: "restarted " + in.Target}}}, nil, nil
+	}
+
+	sdk.AddTool(server, &sdk.Tool{Name: "write_thing", Annotations: &sdk.ToolAnnotations{DestructiveHint: new(false)}}, write)
+	sdk.AddTool(server, &sdk.Tool{Name: "remove_thing", Annotations: &sdk.ToolAnnotations{DestructiveHint: new(true)}}, write)
 
 	server.AddPrompt(&sdk.Prompt{Name: "triage"},
 		func(context.Context, *sdk.GetPromptRequest) (*sdk.GetPromptResult, error) {
@@ -120,7 +124,7 @@ func TestMCPCallsReadTool(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(tools) != 2 || tools[0].Name != "read_thing" || tools[1].Name != "write_thing" {
+	if len(tools) != 3 || tools[0].Name != "read_thing" || tools[1].Name != "remove_thing" || tools[2].Name != "write_thing" {
 		t.Fatalf("tools not listed in name order: %v", tools)
 	}
 }

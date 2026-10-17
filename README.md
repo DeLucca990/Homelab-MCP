@@ -108,6 +108,7 @@ bot, for its own variables) after changing any of them.
 | `HOMELAB_MCP_BAZARR_READONLY` | drops Bazarr's five writes | [docs/tools/BAZARR.md](docs/tools/BAZARR.md#configuration) |
 | `HOMELAB_MCP_HTTP_ADDR` + `HOMELAB_MCP_HTTP_TOKEN` | **required** — the address it listens on and the token it demands | [below](#over-http-instead) |
 | `TELEGRAM_BOT_TOKEN` + `TELEGRAM_ALLOWED_USER_IDS` | the Telegram bot, a separate binary — read by it, not by the server | [docs/modules/telegram.md](docs/modules/telegram.md#2-the-env) |
+| `TELEGRAM_ADMIN_USER_IDS` | the bot's users who may also remove, stop, restart and reconfigure — the rest read and add | [docs/modules/telegram.md](docs/modules/telegram.md#admins) |
 
 ### A `.env` file
 
@@ -222,6 +223,7 @@ any other, so approvals still come from the server, per command: they arrive as 
 # added to the same .env
 TELEGRAM_BOT_TOKEN=123456:ABC...      # from @BotFather
 TELEGRAM_ALLOWED_USER_IDS=11111111    # numeric ids; everyone else is ignored
+TELEGRAM_ADMIN_USER_IDS=11111111      # only these may remove, restart or reconfigure
 ANTHROPIC_API_KEY=sk-ant-...          # optional: without it, commands only
 ```
 

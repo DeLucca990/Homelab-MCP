@@ -69,6 +69,7 @@ ANTHROPIC_API_KEY=sk-ant-...        # optional: without it, commands only
 | --- | --- | --- |
 | `TELEGRAM_BOT_TOKEN` | — | **required** |
 | `TELEGRAM_ALLOWED_USER_IDS` | — | **required**, numeric ids, comma-separated |
+| `TELEGRAM_ADMIN_USER_IDS` | — | the users who may also remove, stop, restart and reconfigure — see [Admins](#admins) |
 | `TELEGRAM_ALLOWED_CHAT_IDS` | — | groups to answer in, besides private chats — negative ids, comma-separated |
 | `HOMELAB_MCP_URL` | `http://$HOMELAB_MCP_HTTP_ADDR/mcp` | set it when the server sits behind `tailscale serve` or on another host |
 | `HOMELAB_MCP_HTTP_TOKEN` | — | **required**, the server's own token |
@@ -79,6 +80,46 @@ ANTHROPIC_API_KEY=sk-ant-...        # optional: without it, commands only
 
 The bot declares elicitation, so the server asks it, per command, before every
 write — there is no setting on either side that skips that.
+
+#### Admins
+
+Everyone in `TELEGRAM_ALLOWED_USER_IDS` reads and makes the changes that add
+to the server — a film, a series, a search, a release, a subtitle. Removing,
+stopping, restarting and reconfiguring is for the users in
+`TELEGRAM_ADMIN_USER_IDS`, who may call every tool the server registered.
+Each of them must also be in `TELEGRAM_ALLOWED_USER_IDS`, or the bot refuses
+to start. With none, nobody does those through the bot.
+
+```sh
+TELEGRAM_ALLOWED_USER_IDS=11111111,22222222
+TELEGRAM_ADMIN_USER_IDS=11111111     # 22222222 adds, but does not remove
+```
+
+Admin only is:
+
+- every write the server annotates `destructiveHint` — removals from the
+  library or the queue, container exec and restart, stopping a stream,
+  subtitle sync, Jellyfin access and transcoding, Prowlarr indexer removal and
+  app sync. A write without the annotation counts as destructive, as the MCP
+  spec has it;
+- and the writes that are not destructive but are administration rather than
+  use, listed in `adminOnlyTools` (`internal/telegram/access.go`): editing a
+  film or series, a message on someone's screen, a Jellyfin user's
+  preferences, Bazarr's language profiles and providers, adding or changing a
+  Prowlarr indexer.
+
+Claude still gets **every tool** whoever asks, so the tool list — the start of
+every prompt, and of its cache — is the same bytes for everyone, and a group's
+conversation, shared by admins and everyone else, keeps one cache. The
+admin-only tools are marked in their descriptions, and each message carries a
+note saying whether its sender is an admin, so Claude does not offer the rest
+what they cannot have. Should it call one anyway, the bot refuses it
+**before** calling the server, and Claude gets the refusal as the tool's
+result: no approval appears and nothing is done. The log says
+`user 22222222 → radarr_movie_remove refused: admin only`.
+
+The check is the bot's: the server knows one bearer token, not who is behind
+it. In a group it goes by each message's sender.
 
 Every problem in the configuration is reported at once, on startup:
 
@@ -273,6 +314,7 @@ more than the buttons do.
 | Layer | Holds against |
 | --- | --- |
 | `TELEGRAM_ALLOWED_USER_IDS` | anyone else who finds the bot. Their updates are dropped without a reply — a reply would confirm the bot exists — and logged |
+| `TELEGRAM_ADMIN_USER_IDS` | an allowed user removing, restarting or reconfiguring something — refused in the bot, before the server is asked |
 | Private chats, plus the groups in `TELEGRAM_ALLOWED_CHAT_IDS` | a group where others read the output, even if a listed user is in it |
 | The server's bearer token | anything on the tailnet that is not a configured client |
 | Per-command approval, server-side | the model, or a prompt injected through a log line or a release name, acting on its own |
@@ -294,6 +336,7 @@ through Telegram, from anywhere.
 | No reply at all | The sender is not in `TELEGRAM_ALLOWED_USER_IDS`, or the group is not in `TELEGRAM_ALLOWED_CHAT_IDS`. Both are logged |
 | No reply to an @mention in a group, but commands work | Privacy mode is on: `/setprivacy` → Disable, then remove and re-add the bot |
 | A friend's button press does nothing | Only the person whose request raised an approval can answer it |
+| Claude says an action needs an admin | The sender is not in `TELEGRAM_ADMIN_USER_IDS` |
 | `connecting to the MCP server … 401` | `HOMELAB_MCP_HTTP_TOKEN` differs from the server's |
 | `connecting to the MCP server … connection refused` | The server is down, or bound to `127.0.0.1` behind `tailscale serve` — set `HOMELAB_MCP_URL` to the address that serves it |
 | "Linguagem natural está desligada" | No `ANTHROPIC_API_KEY` in the bot's environment |

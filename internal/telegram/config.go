@@ -5,6 +5,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -13,6 +14,7 @@ import (
 const (
 	TokenEnv           = "TELEGRAM_BOT_TOKEN"
 	AllowedUsersEnv    = "TELEGRAM_ALLOWED_USER_IDS"
+	AdminUsersEnv      = "TELEGRAM_ADMIN_USER_IDS"
 	AllowedChatsEnv    = "TELEGRAM_ALLOWED_CHAT_IDS"
 	MCPURLEnv          = "HOMELAB_MCP_URL"
 	ModelEnv           = "TELEGRAM_MODEL"
@@ -37,6 +39,7 @@ var efforts = []string{"low", "medium", "high", "xhigh"}
 type Config struct {
 	Token        string
 	AllowedUsers map[int64]bool
+	AdminUsers   map[int64]bool
 
 	AllowedChats map[int64]bool
 
@@ -78,6 +81,26 @@ func LoadConfig() (Config, error) {
 			AllowedUsersEnv))
 	}
 	cfg.AllowedUsers = users
+
+	admins, err := parseUserIDs(env(AdminUsersEnv))
+	if err != nil {
+		problems = append(problems, fmt.Sprintf("%s: %v", AdminUsersEnv, err))
+	}
+	if len(users) > 0 {
+		var strays []string
+		for id := range admins {
+			if !users[id] {
+				strays = append(strays, strconv.FormatInt(id, 10))
+			}
+		}
+		if len(strays) > 0 {
+			slices.Sort(strays)
+			problems = append(problems, fmt.Sprintf(
+				"%s lists %s, not in %s: an admin must also be allowed to use the bot",
+				AdminUsersEnv, strings.Join(strays, ", "), AllowedUsersEnv))
+		}
+	}
+	cfg.AdminUsers = admins
 
 	chats, err := parseChatIDs(env(AllowedChatsEnv))
 	if err != nil {
@@ -126,6 +149,8 @@ func LoadConfig() (Config, error) {
 	}
 	return cfg, nil
 }
+
+func (c Config) IsAdmin(userID int64) bool { return c.AdminUsers[userID] }
 
 func parseUserIDs(raw string) (map[int64]bool, error) {
 	ids := map[int64]bool{}

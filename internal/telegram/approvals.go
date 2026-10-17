@@ -48,12 +48,13 @@ func (a *Approvals) SetMessenger(tg messenger) { a.tg = tg }
 type requester struct {
 	chatID int64
 	userID int64
+	admin  bool
 }
 
 type requesterKey struct{}
 
-func withRequester(ctx context.Context, chatID, userID int64) context.Context {
-	return context.WithValue(ctx, requesterKey{}, requester{chatID: chatID, userID: userID})
+func withRequester(ctx context.Context, chatID, userID int64, admin bool) context.Context {
+	return context.WithValue(ctx, requesterKey{}, requester{chatID: chatID, userID: userID, admin: admin})
 }
 
 // Anything short of a button press returns "cancel", which the server treats as no.

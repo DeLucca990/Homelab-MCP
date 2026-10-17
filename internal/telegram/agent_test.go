@@ -3,6 +3,7 @@ package telegram
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -93,9 +94,19 @@ func TestAgentRunsApprovedWrite(t *testing.T) {
 
 	first := claude.requests[0]
 	tools, _ := first["tools"].([]any)
-	if len(tools) != 3 || tools[0].(map[string]any)["name"] != "read_thing" ||
-		tools[2].(map[string]any)["name"] != resourceTool {
+	if len(tools) != 4 || tools[0].(map[string]any)["name"] != "read_thing" ||
+		tools[3].(map[string]any)["name"] != resourceTool {
 		t.Errorf("tools: %v", first["tools"])
+	}
+	for _, tool := range tools {
+		tool := tool.(map[string]any)
+		marked := strings.HasPrefix(fmt.Sprint(tool["description"]), adminMark)
+		if marked != (tool["name"] == "remove_thing") {
+			t.Errorf("%s: admin mark %v", tool["name"], marked)
+		}
+	}
+	if msgs, _ := json.Marshal(first["messages"]); !strings.Contains(string(msgs), userNote) {
+		t.Errorf("Claude was not told the user is not an admin: %s", msgs)
 	}
 	if first["model"] != defaultModel || first["cache_control"] == nil || first["fallbacks"] != "default" {
 		t.Errorf("request settings: model=%v cache_control=%v fallbacks=%v",
@@ -129,6 +140,71 @@ func TestAgentReportsDeclinedWriteToClaude(t *testing.T) {
 	second, _ := json.Marshal(claude.requests[1]["messages"])
 	if !strings.Contains(string(second), `"is_error":true`) || !strings.Contains(string(second), "declined") {
 		t.Errorf("the decline did not reach Claude as an error: %s", second)
+	}
+}
+
+func TestAgentRefusesAdminToolForUser(t *testing.T) {
+	mcpServer := newFakeServer(t)
+	claude := newFakeClaude(t,
+		message("tool_use", `[{"type":"tool_use","id":"tu_1","name":"read_thing","input":{}},`+
+			`{"type":"tool_use","id":"tu_2","name":"remove_thing","input":{"target":"dune"}}]`),
+		message("end_turn", `[{"type":"text","text":"Remover precisa de um admin."}]`),
+	)
+	approvals, tg := newApprovalHarness("y", 42, time.Second)
+	agent := newTestAgent(t, claude, mcpServer, approvals)
+
+	if _, err := agent.Ask(context.Background(), 1, 42, "remove o dune"); err != nil {
+		t.Fatal(err)
+	}
+	if mcpServer.writes.Load() != 0 || len(tg.sent) != 0 {
+		t.Fatalf("a user's removal got through: %d writes, approvals %v", mcpServer.writes.Load(), tg.sent)
+	}
+
+	second, _ := json.Marshal(claude.requests[1]["messages"])
+	if !strings.Contains(string(second), "all good") {
+		t.Errorf("the read was refused too: %s", second)
+	}
+	if !strings.Contains(string(second), "remove_thing was not called") || !strings.Contains(string(second), `"is_error":true`) {
+		t.Errorf("the refusal did not reach Claude as an error: %s", second)
+	}
+}
+
+func TestAgentAdminRunsAdminTool(t *testing.T) {
+	mcpServer := newFakeServer(t)
+	claude := newFakeClaude(t,
+		message("tool_use", `[{"type":"tool_use","id":"tu_1","name":"remove_thing","input":{"target":"dune"}}]`),
+		message("end_turn", `[{"type":"text","text":"Removi o Dune."}]`),
+	)
+	approvals, tg := newApprovalHarness("y", 42, time.Second)
+	agent := newTestAgent(t, claude, mcpServer, approvals)
+	agent.isAdmin = Config{AdminUsers: map[int64]bool{42: true}}.IsAdmin
+
+	if _, err := agent.Ask(context.Background(), 1, 42, "remove o dune"); err != nil {
+		t.Fatal(err)
+	}
+	if mcpServer.writes.Load() != 1 || len(tg.sent) != 1 {
+		t.Fatalf("an admin's removal did not run: %d writes, approvals %v", mcpServer.writes.Load(), tg.sent)
+	}
+	if msgs, _ := json.Marshal(claude.requests[0]["messages"]); !strings.Contains(string(msgs), adminNote) {
+		t.Errorf("Claude was not told the user is an admin: %s", msgs)
+	}
+}
+
+func TestAdminOnly(t *testing.T) {
+	for _, tc := range []struct {
+		tool  sdk.Tool
+		admin bool
+	}{
+		{sdk.Tool{Name: "radarr_queue_status", Annotations: &sdk.ToolAnnotations{ReadOnlyHint: true}}, false},
+		{sdk.Tool{Name: "radarr_movie_add", Annotations: &sdk.ToolAnnotations{DestructiveHint: new(false)}}, false},
+		{sdk.Tool{Name: "radarr_movie_remove", Annotations: &sdk.ToolAnnotations{DestructiveHint: new(true)}}, true},
+		{sdk.Tool{Name: "unsaid_write", Annotations: &sdk.ToolAnnotations{}}, true},
+		{sdk.Tool{Name: "unannotated"}, true},
+		{sdk.Tool{Name: "prowlarr_indexer_add", Annotations: &sdk.ToolAnnotations{DestructiveHint: new(false)}}, true},
+	} {
+		if got := adminOnly(&tc.tool); got != tc.admin {
+			t.Errorf("%s: admin only %v, want %v", tc.tool.Name, got, tc.admin)
+		}
 	}
 }
 
