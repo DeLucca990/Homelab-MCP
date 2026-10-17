@@ -30,6 +30,7 @@ internal/dotenv/          .env → process environment, before registration
 internal/mcp/             protocol layer — registration, handlers, rendering, confirmation,
                           prompts and resources
 internal/overview/        every cheap check at once          (composes the collectors below)
+internal/digest/          what happened over a window        (composes the same, and the overview)
 internal/system/          host, CPU, memory, disk            (gopsutil)
 internal/services/        systemd units                      (systemctl)
 internal/containers/      docker                             (Engine API over the unix socket)
@@ -166,11 +167,11 @@ that does not exist reads as authoritative and sends the model at nothing. So
 `why-no-download` is not registered without an `*arr`, and the tool names inside
 both prompts expand to the ones this install actually has.
 
-The result is 8 tools on a default install and up to 74 fully configured:
+The result is 9 tools on a default install and up to 75 fully configured:
 
 | Family | Always | Needs config | Confirms |
 |---|---|---|---|
-| Overview (1) | all | – | – |
+| Overview and digest (2) | all | – | – |
 | System (5) | all | – | – |
 | Docker (4) | status, logs | exec, restart — **allowlist** | exec, restart |
 | Radarr (15) | – | all — **URL + API key** | add, search, remove, queue_remove, release_grab, import, movie_edit |
@@ -243,6 +244,37 @@ Two distinctions it holds that a simple aggregate would lose:
   something can still *write* to. A read-only mount at 100% is an ISO or a
   squashfs image, and reporting it is how a monitor teaches its reader to ignore
   it.
+
+### The digest is the overview over time, and remembers nothing
+
+`homelab_daily_digest` (`internal/digest/`) answers what happened over a window —
+by default the last day — the way the overview answers what is wrong now, and
+under the same rule: it imports collectors and nothing from `internal/mcp`, and
+what needs attention in it is the overview's own warnings, taken unchanged.
+
+It keeps **no state**. Everything in it is either an event a service
+timestamped — an import, a failure, a release date, a sign-in — filtered to the
+window, or a reading of the machine now. Nothing is "since the last call",
+because a server that remembered would answer one client differently depending
+on what another had asked before. Comparing today with yesterday is the
+caller's job, and `totals` is what it is given to do it with: disk use per
+writable filesystem, subtitles wanted, failing indexers, container restart
+counts. The Telegram bot keeps those in a file of its own
+([modules/telegram.md](modules/telegram.md#the-daily-digest)), reading the
+JSON into a mirror of its own rather than importing the type; a test in
+`internal/telegram/digest_test.go` holds the mirror to the server's fields —
+the one place the bot's package touches a collector, and only under test.
+
+Two judgements are its own, stated where they are computed:
+
+- **Late has a grace.** A release is late once it has been out six hours
+  without a file; an episode that aired an hour ago with nothing yet is the
+  normal case. The late window is the digest window shifted back by that
+  grace, so digests 24 hours apart judge each release exactly once — never
+  twice, never not at all.
+- **A reboot is one line, not twenty.** Containers whose state began with the
+  boot are left out of the container list, since "the host rebooted" already
+  says why.
 
 ---
 
@@ -589,3 +621,5 @@ silent. Silent truncation reads as a complete answer.
 | Add a Telegram command | `toolCommands` in `internal/telegram/commands.go` |
 | Change how an approval looks or who may answer it | `internal/telegram/approvals.go` |
 | Change the bot's model, system prompt or history limits | `internal/telegram/agent.go` |
+| Change what the digest reports, or what counts as late | `internal/digest/digest.go` |
+| Change how the bot writes the digest, compares days or asks for its headline | `internal/telegram/digest.go` |

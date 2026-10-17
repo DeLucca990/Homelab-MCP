@@ -7,6 +7,7 @@ they are built the way they are, see [`docs/modules/`](../modules/) and
 | Family | Tools | Page |
 | --- | --- | --- |
 | Overview | 1, read-only, spans every family | [below](#homelab_overview) |
+| Digest | 1, read-only, spans every family over a window of time | [below](#homelab_daily_digest) |
 | System | 5, all read-only | [SYSTEM.md](SYSTEM.md) |
 | Docker | 4 — 2 read-only, 2 opt-in actions | [DOCKER.md](DOCKER.md) |
 | Radarr | 15 — 8 read-only, 7 writes | [RADARR.md](RADARR.md) |
@@ -15,8 +16,8 @@ they are built the way they are, see [`docs/modules/`](../modules/) and
 | Bazarr | 9 — 4 read-only, 5 writes | [BAZARR.md](BAZARR.md) |
 | Prowlarr | 10 — 6 read-only, 4 writes | [PROWLARR.md](PROWLARR.md) |
 
-**74 tools in total, but never all at once.** A default install registers
-**8**: the overview, the five system tools and the two read-only Docker ones.
+**75 tools in total, but never all at once.** A default install registers
+**9**: the overview, the digest, the five system tools and the two read-only Docker ones.
 The rest appear only when the environment says so — the Docker actions need an
 allowlist, and the Radarr, Sonarr, Prowlarr, Jellyfin and Bazarr families each need a URL and an
 API key. A tool that is not registered does not appear in `tools/list`, so it
@@ -91,6 +92,64 @@ nothing needs attention (6 checks in 61ms)
   saying how many streams are being re-encoded on the CPU, which is what the load
   usually turns out to be. `system_cpu_cores` is one call away when the question
   is about the cores themselves.
+
+## `homelab_daily_digest`
+
+| Parameter | Type | Default | |
+| --- | --- | --- | --- |
+| `hours` | integer | `24` | how far back to look, max `168` |
+
+The overview over a window of time: not *"is anything wrong now"* but *"what
+happened since I last looked"*.
+
+```
+the last 24h, read in 320ms
+
+needs attention now:
+  disk: /srv/media is 94% full, 52G left
+
+the host booted 5h0m ago
+
+containers:
+  sonarr restarted 2h0m ago (killed for its memory limit)
+
+imported (3):
+  radarr  Dune: Part Two (2024)  Bluray-2160p  1h0m ago
+  sonarr  Severance S02E04  WEBDL-1080p  2h0m ago
+  sonarr  Severance S02E05  WEBDL-1080p  2h1m ago
+
+failed (1):
+  sonarr  The Bear S03E01  "sample file"  2h30m ago
+
+late — due, monitored, still no file (1):
+  sonarr  Andor S02E09  2026-10-16 22:00
+
+due in the next 24h (1):
+  sonarr  The Last of Us S02E03  2026-10-17 22:00
+
+jellyfin: 2 playback(s), 3 failed sign-in(s)
+  ...
+
+writable filesystems:
+  /srv/media 90% (900G of 1000G)
+```
+
+- **Attention is the overview's.** The first block is exactly what
+  `homelab_overview` would say now, so the two never disagree.
+- **Late, not merely missing.** A monitored release counts once it has been
+  out six hours without a file — an episode that aired an hour ago is the
+  normal case. Releases in cinemas are left out: nobody can download those.
+- **A reboot is one line.** Containers that came up with the host are not
+  listed one by one.
+- **Totals, for the caller to compare.** The JSON's `totals` — disk use per
+  writable filesystem, subtitles wanted, failing indexers, container restart
+  counts — are the numbers worth comparing with yesterday's. The server keeps
+  no state: whoever wants a day-on-day comparison keeps yesterday's totals,
+  which is what the [Telegram bot](../modules/telegram.md#the-daily-digest) does.
+- **Partial, and says so.** History is read 200 events per service and
+  Jellyfin's log 200 entries; a window busier than that is reported under
+  `truncated`, and a part that could not be read under `errors`, without
+  withholding the rest.
 
 ## What every tool has in common
 

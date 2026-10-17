@@ -77,6 +77,10 @@ ANTHROPIC_API_KEY=sk-ant-...        # optional: without it, commands only
 | `TELEGRAM_MODEL` | `claude-sonnet-5-5` | `claude-opus-5-5` costs about twice as much |
 | `TELEGRAM_EFFORT` | `medium` | `low`, `medium`, `high` or `xhigh` |
 | `TELEGRAM_APPROVAL_TIMEOUT` | `2m` | how long a question waits for a button |
+| `TELEGRAM_DIGEST_AT` | `17:00` | when the [daily digest](#the-daily-digest) goes out, local time; `off` turns it off |
+| `TELEGRAM_DIGEST_CHAT_IDS` | the admins | who gets it — user ids for private chats, negative ids for groups, each already allowed above |
+| `TELEGRAM_DIGEST_MODEL` | `claude-haiku-5-5` | writes the digest's headline, when natural language is on |
+| `TELEGRAM_DIGEST_STATE` | see below | the file the digest keeps its totals in |
 
 The bot declares elicitation, so the server asks it, per command, before every
 write — there is no setting on either side that skips that.
@@ -157,6 +161,7 @@ ExecStart=/home/ubuntu/repos/Homelab-MCP/bin/telegram-bot
 User=ubuntu
 Restart=always
 RestartSec=5
+StateDirectory=homelab-telegram-bot
 
 [Install]
 WantedBy=multi-user.target
@@ -170,7 +175,9 @@ journalctl -u homelab-telegram-bot -f
 ```
 
 The `User=` needs no `docker` group: the bot touches nothing on the host. To
-update, `make deploy-bot`.
+update, `make deploy-bot`. `StateDirectory=` gives it
+`/var/lib/homelab-telegram-bot`, owned by that user, for the
+[daily digest](#the-daily-digest)'s file.
 
 It needs no inbound port. Long polling only opens connections outwards, to
 `api.telegram.org` and `api.anthropic.com`, so it works on a host that is
@@ -194,6 +201,7 @@ reachable only on the tailnet.
 | `/missing` | `sonarr_missing_episodes`, across the whole library |
 | `/sessions` | `jellyfin_active_sessions` |
 | `/search <title>` | `radarr_movie_lookup`, `sonarr_series_lookup` — whichever the server registered |
+| `/digest` | the [daily digest](#the-daily-digest), now |
 | `/reset` | forgets the conversation |
 | `/help` | the list |
 
@@ -287,6 +295,88 @@ instead of making, which never ran — is logged with its first 400 characters.
 
 ---
 
+## The daily digest
+
+Every day at `TELEGRAM_DIGEST_AT` (17:00 unless set) the admins get the last
+24 hours in one message: what needs attention now, whether the server or a
+container restarted, what arrived, what failed and why, what is late, what is
+due tomorrow, who watched what on Jellyfin and any failed sign-ins, subtitles
+wanted, failing indexers and the disks — each against the day before.
+
+```
+📋 Resumo diário · sábado, 17/10 17:00
+O disco de mídia está em 90% e enche em cerca de 10 dias; o sonarr reiniciou por falta de memória.
+
+⚠️ Precisa de atenção
+• disk: /srv/media is 94% full, 52G left
+
+🔁 Servidor e containers
+• sonarr reiniciou há 2h — morto por falta de memória
+
+📥 Chegou
+• Dune: Part Two (2024) — Bluray-2160p
+• Severance — S02E04, S02E05
+
+⏰ Atrasado
+• Andor S02E09 — saiu ontem 22:00
+
+💬 Legendas: 12 faltando (−3 desde ontem)
+
+💾 Disco
+• /srv/media 90% · +14G desde ontem · enche em ~10 dias
+```
+
+**The facts come from a template, the headline from a model.** The bot calls
+the server's [`homelab_daily_digest`](../tools/README.md#homelab_daily_digest),
+reads its JSON and writes the message itself, in Portuguese, leaving out every
+empty section. Only then is `TELEGRAM_DIGEST_MODEL` — Haiku, at effort `low` —
+shown that text and asked for the line in italics at the top: what matters
+most, in a sentence or two, from facts already below it. It adds nothing the
+message does not say, so a headline that fails — the API down, a refusal, no
+`ANTHROPIC_API_KEY` — costs only the headline: the digest goes without it, and
+the log says why. It is logged like a question, at well under a cent:
+`daily digest: headline by claude-haiku-5-5, $0.0004`. Titles, release names
+and log lines in the report come from outside; the prompt tells the model they
+are data, and since the headline is the only thing it writes, the worst a
+planted instruction can do is a misleading sentence above the true list.
+
+**Yesterday is a file.** The server keeps no state, so the comparison is the
+bot's. After each scheduled digest it appends that day's totals — disk use per
+writable filesystem, subtitles wanted, failing indexers, container restarts —
+to a JSON file, keeping the last 30, and the next digest reads them back:
+
+- *"desde ontem"* compares with the newest digest at least 12 hours old, so a
+  `/digest` an hour after the scheduled one still compares with the day
+  before. A day missed shows its date instead (*"desde 15/10"*).
+- *"enche em ~N dias"* draws a straight line from the oldest digest of the
+  last week to now. It needs at least 20 hours of history, and says nothing
+  for a filesystem that would take more than 90 days.
+
+The file is `TELEGRAM_DIGEST_STATE` if set, otherwise `digest.json` in
+systemd's `StateDirectory=` (`/var/lib/homelab-telegram-bot`, with the unit
+above), then `$XDG_STATE_HOME/homelab-telegram-bot/`, then
+`~/.local/state/homelab-telegram-bot/`. It is written whole and renamed into
+place, so a crash mid-write leaves yesterday's.
+
+**When.** The schedule lives in the bot, not in a timer: one variable, and
+`/digest` runs the same code. The same file records when the last scheduled
+digest went out, which is what makes a restart safe — the bot does not send
+twice in a day, and one that was down at 17:00 sends the missed digest when it
+comes back, as long as that is within six hours. A first start after the hour
+waits for tomorrow rather than sending at once; `/digest` is there to see it
+straight away. A `/digest` is never recorded: it is a look, not a day.
+
+**Who.** By default the admins, each in private, because the digest names who
+failed to sign in and from which address. `TELEGRAM_DIGEST_CHAT_IDS` sends it
+elsewhere, but only to chats the bot already answers — a user in
+`TELEGRAM_ALLOWED_USER_IDS` or a group in `TELEGRAM_ALLOWED_CHAT_IDS` — and
+anything else stops it from starting. With no admins and no list, there is no
+digest, and the startup log says so. If the server cannot be read at 17:00,
+the digest is a message saying why: a server that is down is exactly what the
+digest is for.
+
+---
+
 ## Approvals
 
 The server's [confirmation round trip](../ARCHITECTURE.md#3-waiting-for-a-user-response)
@@ -375,6 +465,9 @@ through Telegram, from anywhere.
 | "Linguagem natural está desligada" | No `ANTHROPIC_API_KEY` in the bot's environment |
 | An approval shows "Expirou sem resposta" | Nobody pressed within `TELEGRAM_APPROVAL_TIMEOUT`; nothing was done |
 | "Ainda estou no pedido anterior" | The previous question is still running, usually waiting on an approval further up the chat |
+| No digest at 17:00 | The startup log says why: `TELEGRAM_DIGEST_AT=off`, or nobody to send it to — no `TELEGRAM_ADMIN_USER_IDS` and no `TELEGRAM_DIGEST_CHAT_IDS`. A bot first started after the hour waits for the next day |
+| "o servidor não tem homelab_daily_digest" | The server is older than the bot: `make deploy` it too |
+| The digest never says "desde ontem" | No scheduled digest has been recorded yet, or the state file cannot be written — the log says `tomorrow's will not compare with today's` |
 
 Over HTTP, the go-sdk closes a client session on any error status — an
 unknown tool, or arguments the server rejects. The bot drops the session and

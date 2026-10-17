@@ -25,6 +25,7 @@ var prices = map[string]price{
 	"claude-sonnet-5-5": {2, 10, 0.20},
 	"claude-sonnet-5":   {2, 10, 0.20},
 	"claude-sonnet-4-6": {3, 15, 0.30},
+	"claude-haiku-5-5":  {0.10, 0.50, 0.01}, // prompts up to 100K tokens; the digest's headline is far below
 	"claude-haiku-4-5":  {1, 5, 0.10},
 }
 

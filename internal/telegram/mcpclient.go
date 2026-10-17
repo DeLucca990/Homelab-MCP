@@ -156,6 +156,36 @@ func (m *MCP) Call(ctx context.Context, name string, args map[string]any) (text 
 	return resultText(res), res.IsError, nil
 }
 
+// CallInto calls a tool and decodes its structured output into out, for the
+// bot's own use of a result rather than Claude's. A result marked as an error
+// comes back as one, carrying its text.
+func (m *MCP) CallInto(ctx context.Context, name string, args map[string]any, out any) error {
+	session, err := m.connect(ctx)
+	if err != nil {
+		return err
+	}
+
+	res, err := session.CallTool(ctx, &sdk.CallToolParams{Name: name, Arguments: args})
+	if err != nil {
+		m.drop(session)
+		return fmt.Errorf("%s: %w", name, err)
+	}
+	if res.IsError {
+		return fmt.Errorf("%s: %s", name, resultText(res))
+	}
+	if res.StructuredContent == nil {
+		return fmt.Errorf("%s returned no structured output", name)
+	}
+	raw, err := json.Marshal(res.StructuredContent)
+	if err != nil {
+		return fmt.Errorf("%s: %w", name, err)
+	}
+	if err := json.Unmarshal(raw, out); err != nil {
+		return fmt.Errorf("%s: reading its output: %w", name, err)
+	}
+	return nil
+}
+
 // Sorted for the same reason as Tools: the resource tool's description lists them.
 func (m *MCP) Resources(ctx context.Context) ([]*sdk.Resource, error) {
 	return retry(ctx, m, func(session *sdk.ClientSession) ([]*sdk.Resource, error) {

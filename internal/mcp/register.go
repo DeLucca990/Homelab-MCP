@@ -38,6 +38,28 @@ func registerTools(s *sdk.Server) {
 			"system_cpu_cores when the question is about the cores themselves.",
 	}, handleOverview)
 
+	// digest tool
+	sdk.AddTool(s, &sdk.Tool{
+		Name: "homelab_daily_digest",
+		Annotations: &sdk.ToolAnnotations{
+			Title:        "Homelab Daily Digest",
+			ReadOnlyHint: true,
+		},
+		Description: "Answers 'what happened on this server lately' in ONE call — the counterpart " +
+			"of homelab_overview over a window of time (default the last 24 hours) instead of " +
+			"an instant. Reports what needs attention now (the overview's own warnings), whether " +
+			"the host rebooted, which containers restarted, were recreated or stopped, what " +
+			"Radarr and Sonarr imported and what failed with the reason, which monitored releases " +
+			"are late — due more than six hours ago and still without a file, as opposed to not " +
+			"out yet — what is due in the next 24 hours, who played what on Jellyfin and any " +
+			"failed sign-ins, where each is configured. It also returns totals worth comparing " +
+			"from one day to the next — disk use per writable filesystem, subtitles wanted, " +
+			"failing indexers, container restart counts. It keeps no state: it cannot say what " +
+			"changed since an earlier call, only what the services timestamped within the window. " +
+			"Use it for 'how was the night', 'what arrived today' or a daily report; use " +
+			"homelab_overview for 'is anything wrong right now'.",
+	}, handleDigest)
+
 	// system host tool
 	sdk.AddTool(s, &sdk.Tool{
 		Name: "system_host_info",

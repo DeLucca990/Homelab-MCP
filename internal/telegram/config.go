@@ -5,6 +5,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -20,6 +21,10 @@ const (
 	ModelEnv           = "TELEGRAM_MODEL"
 	EffortEnv          = "TELEGRAM_EFFORT"
 	ApprovalTimeoutEnv = "TELEGRAM_APPROVAL_TIMEOUT"
+	DigestAtEnv        = "TELEGRAM_DIGEST_AT"
+	DigestChatsEnv     = "TELEGRAM_DIGEST_CHAT_IDS"
+	DigestModelEnv     = "TELEGRAM_DIGEST_MODEL"
+	DigestStateEnv     = "TELEGRAM_DIGEST_STATE"
 
 	mcpAddrEnv  = "HOMELAB_MCP_HTTP_ADDR"
 	mcpTokenEnv = "HOMELAB_MCP_HTTP_TOKEN"
@@ -32,6 +37,8 @@ const (
 	defaultModel           = "claude-sonnet-5-5"
 	defaultEffort          = "medium"
 	defaultApprovalTimeout = 2 * time.Minute
+	defaultDigestAt        = "17:00"
+	defaultDigestModel     = "claude-haiku-5-5"
 )
 
 var efforts = []string{"low", "medium", "high", "xhigh"}
@@ -51,7 +58,16 @@ type Config struct {
 	Effort string
 
 	ApprovalTimeout time.Duration
+
+	DigestAt    *DailyAt
+	DigestChats []int64
+	DigestModel string
+	DigestState string
 }
+
+type DailyAt struct{ Hour, Minute int }
+
+func (d DailyAt) String() string { return fmt.Sprintf("%02d:%02d", d.Hour, d.Minute) }
 
 // LoadConfig reports every problem at once.
 func LoadConfig() (Config, error) {
@@ -64,6 +80,7 @@ func LoadConfig() (Config, error) {
 		Effort:          strings.ToLower(envOr(EffortEnv, defaultEffort)),
 		ApprovalTimeout: defaultApprovalTimeout,
 		LLM:             env(anthropicKeyEnv) != "" || env(anthropicTokenEnv) != "",
+		DigestModel:     envOr(DigestModelEnv, defaultDigestModel),
 	}
 
 	if cfg.Token == "" {
@@ -144,10 +161,80 @@ func LoadConfig() (Config, error) {
 		}
 	}
 
+	problems = append(problems, cfg.loadDigest()...)
+
 	if len(problems) > 0 {
 		return Config{}, fmt.Errorf("configuration:\n  - %s", strings.Join(problems, "\n  - "))
 	}
 	return cfg, nil
+}
+
+func (c *Config) loadDigest() []string {
+	var problems []string
+
+	switch raw := strings.ToLower(envOr(DigestAtEnv, defaultDigestAt)); raw {
+	case "off":
+	default:
+		t, err := time.Parse("15:04", raw)
+		if err != nil {
+			problems = append(problems, fmt.Sprintf("%s=%q: must be a time of day such as 17:00, or off", DigestAtEnv, raw))
+			break
+		}
+		c.DigestAt = &DailyAt{Hour: t.Hour(), Minute: t.Minute()}
+	}
+
+	if raw := env(DigestChatsEnv); raw != "" {
+		for _, part := range strings.Split(raw, ",") {
+			part = strings.TrimSpace(part)
+			if part == "" {
+				continue
+			}
+			id, err := strconv.ParseInt(part, 10, 64)
+			switch {
+			case err != nil || id == 0:
+				problems = append(problems, fmt.Sprintf("%s: %q is not a chat id", DigestChatsEnv, part))
+			case id > 0 && !c.AllowedUsers[id], id < 0 && !c.AllowedChats[id]:
+				problems = append(problems, fmt.Sprintf(
+					"%s lists %d, which is in neither %s nor %s: the digest would send the "+
+						"server's state to a chat the bot otherwise ignores",
+					DigestChatsEnv, id, AllowedUsersEnv, AllowedChatsEnv))
+			default:
+				c.DigestChats = append(c.DigestChats, id)
+			}
+		}
+	} else {
+		for id := range c.AdminUsers {
+			c.DigestChats = append(c.DigestChats, id)
+		}
+		slices.Sort(c.DigestChats)
+	}
+
+	c.DigestState = env(DigestStateEnv)
+	if c.DigestState == "" {
+		dir, err := stateDir()
+		if err != nil {
+			problems = append(problems, fmt.Sprintf("%s is not set and there is no directory to keep "+
+				"the digest's totals in (%v): set it to a file path", DigestStateEnv, err))
+		} else {
+			c.DigestState = filepath.Join(dir, "digest.json")
+		}
+	}
+	return problems
+}
+
+func stateDir() (string, error) {
+	if dirs := env("STATE_DIRECTORY"); dirs != "" {
+		dir, _, _ := strings.Cut(dirs, ":")
+		return dir, nil
+	}
+	if dir := env("XDG_STATE_HOME"); dir != "" {
+		return filepath.Join(dir, "homelab-telegram-bot"), nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".local", "state", "homelab-telegram-bot"), nil
 }
 
 func (c Config) IsAdmin(userID int64) bool { return c.AdminUsers[userID] }

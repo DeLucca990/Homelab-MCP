@@ -9,13 +9,14 @@ running out of disk?"* — or *"why hasn't Dune downloaded?"* — instead of SSH
 
 ## Tools
 
-**74 tools — one overview and seven families — and never all at once.** A default install
-registers 8; the rest appear only when the environment authorises them. Full specifications,
+**75 tools — an overview, a digest and seven families — and never all at once.** A default
+install registers 9; the rest appear only when the environment authorises them. Full specifications,
 one page per family:
 
 | Family | Tools | Reference |
 | --- | --- | --- |
 | **Overview** | one call that checks every family below and reports only what is wrong | [docs/tools/README.md](docs/tools/README.md#homelab_overview) |
+| **Digest** | the same over the last day: what arrived, failed, is late or restarted, and the totals to compare with tomorrow | [docs/tools/README.md](docs/tools/README.md#homelab_daily_digest) |
 | **System** | host info, CPU, memory, disk, systemd units | [docs/tools/SYSTEM.md](docs/tools/SYSTEM.md) |
 | **Docker** | container status, logs, and — opt-in — exec and restart | [docs/tools/DOCKER.md](docs/tools/DOCKER.md) |
 | **Radarr** | library, queue, lookup, health, interactive search, import, history, calendar, and seven writes | [docs/tools/RADARR.md](docs/tools/RADARR.md) |
@@ -109,6 +110,7 @@ bot, for its own variables) after changing any of them.
 | `HOMELAB_MCP_HTTP_ADDR` + `HOMELAB_MCP_HTTP_TOKEN` | **required** — the address it listens on and the token it demands | [below](#over-http-instead) |
 | `TELEGRAM_BOT_TOKEN` + `TELEGRAM_ALLOWED_USER_IDS` | the Telegram bot, a separate binary — read by it, not by the server | [docs/modules/telegram.md](docs/modules/telegram.md#2-the-env) |
 | `TELEGRAM_ADMIN_USER_IDS` | the bot's users who may also remove, stop, restart and reconfigure — the rest read and add | [docs/modules/telegram.md](docs/modules/telegram.md#admins) |
+| `TELEGRAM_DIGEST_AT` | when the bot sends the admins its daily digest — `17:00` unless set, `off` for never | [docs/modules/telegram.md](docs/modules/telegram.md#the-daily-digest) |
 
 ### A `.env` file
 

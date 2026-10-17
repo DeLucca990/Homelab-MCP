@@ -34,6 +34,7 @@ var toolCommands = []command{
 }
 
 var otherCommands = []command{
+	{name: "digest", description: "Resumo das últimas 24h"},
 	{name: "reset", description: "Começar uma conversa nova"},
 	{name: "help", description: "O que este bot sabe fazer"},
 }

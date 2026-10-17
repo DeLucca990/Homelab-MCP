@@ -142,7 +142,9 @@ func handleConfigurationResource(ctx context.Context, req *sdk.ReadResourceReque
 		"Each line says what would enable it.\n\n")
 
 	b.WriteString("## Overview\n\n`homelab_overview` is always registered and covers every " +
-		"area below in one call. It is the one to reach for first.\n\n")
+		"area below in one call. It is the one to reach for first.\n\n" +
+		"`homelab_daily_digest` is always registered too: the same areas over the last day " +
+		"instead of right now — what arrived, what failed, what is late, what restarted.\n\n")
 
 	b.WriteString("## System (5 tools)\n\nAlways registered, all read-only: host info, CPU, " +
 		"memory, disk, systemd units. The systemd one is Linux-only and errors elsewhere.\n\n")

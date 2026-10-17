@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-telegram/bot"
@@ -19,6 +20,9 @@ type Bot struct {
 	approvals *Approvals
 	tg        *bot.Bot
 	username  string // the bot's own, to recognise a mention in a group
+
+	headliner *headliner // nil when natural language is off: the digest goes without a headline
+	digestMu  sync.Mutex // one digest at a time, so two never read and write the state at once
 }
 
 func New(cfg Config) (*Bot, error) {
@@ -26,6 +30,7 @@ func New(cfg Config) (*Bot, error) {
 	b.mcp = NewMCP(cfg.MCPURL, cfg.MCPToken, b.approvals.Elicit)
 	if cfg.LLM {
 		b.agent = NewAgent(cfg, b.mcp)
+		b.headliner = newHeadliner(cfg.DigestModel)
 	}
 
 	tg, err := bot.New(cfg.Token,
@@ -67,6 +72,21 @@ func (b *Bot) Run(ctx context.Context) {
 		len(b.cfg.AllowedUsers), len(b.cfg.AdminUsers), b.cfg.MCPURL, mode)
 	if len(b.cfg.AdminUsers) == 0 {
 		log.Printf("%s is not set: removals, restarts and configuration changes are refused for everyone", AdminUsersEnv)
+	}
+
+	switch {
+	case b.cfg.DigestAt == nil:
+		log.Printf("daily digest off (%s=off)", DigestAtEnv)
+	case len(b.cfg.DigestChats) == 0:
+		log.Printf("daily digest off: nobody to send it to — set %s or %s", AdminUsersEnv, DigestChatsEnv)
+	default:
+		headline := "a headline by " + b.cfg.DigestModel
+		if b.headliner == nil {
+			headline = "no headline (no Anthropic credential)"
+		}
+		log.Printf("daily digest at %s to %d chat(s), with %s, totals kept in %s",
+			b.cfg.DigestAt, len(b.cfg.DigestChats), headline, b.cfg.DigestState)
+		go b.runDigests(ctx)
 	}
 
 	b.tg.Start(ctx)
@@ -142,6 +162,11 @@ func (b *Bot) onText(ctx context.Context, msg *models.Message) {
 			b.agent.Reset(chatID)
 		}
 		b.sendHTML(ctx, chatID, "Conversa reiniciada.")
+	case "digest":
+		log.Printf("%s → /digest", who(requester{chatID: chatID, userID: msg.From.ID}))
+		stop := b.typing(ctx, chatID)
+		b.sendDigest(ctx, []int64{chatID}, false)
+		stop()
 	default:
 		cmd, ok := findCommand(name)
 		if !ok {
