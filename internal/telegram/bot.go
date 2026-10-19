@@ -23,6 +23,7 @@ type Bot struct {
 
 	headliner *headliner // nil when natural language is off: the digest goes without a headline
 	digestMu  sync.Mutex // one digest at a time, so two never read and write the state at once
+	ledger    *Ledger    // what every model response cost, for /cost and the daily budget
 }
 
 func New(cfg Config) (*Bot, error) {
@@ -32,6 +33,13 @@ func New(cfg Config) (*Bot, error) {
 		b.agent = NewAgent(cfg, b.mcp)
 		b.headliner = newHeadliner(cfg.DigestModel)
 	}
+
+	ledger, err := OpenLedger(cfg.LedgerPath, time.Now())
+	if err != nil {
+		log.Printf("spending ledger: %v — keeping it in memory, so a restart forgets what today cost", err)
+		ledger = &Ledger{}
+	}
+	b.ledger = ledger
 
 	tg, err := bot.New(cfg.Token,
 		bot.WithMiddlewares(b.authorize),
@@ -74,6 +82,12 @@ func (b *Bot) Run(ctx context.Context) {
 		log.Printf("%s is not set: removals, restarts and configuration changes are refused for everyone", AdminUsersEnv)
 	}
 
+	budget := "no daily budget"
+	if b.cfg.DailyBudget > 0 {
+		budget = fmt.Sprintf("a daily budget of $%.2f", b.cfg.DailyBudget)
+	}
+	log.Printf("spending kept in %s, with %s", b.cfg.LedgerPath, budget)
+
 	switch {
 	case b.cfg.DigestAt == nil:
 		log.Printf("daily digest off (%s=off)", DigestAtEnv)
@@ -85,7 +99,7 @@ func (b *Bot) Run(ctx context.Context) {
 			headline = "no headline (no Anthropic credential)"
 		}
 		log.Printf("daily digest at %s to %d chat(s), with %s, totals kept in %s",
-			b.cfg.DigestAt, len(b.cfg.DigestChats), headline, b.cfg.DigestState)
+			b.cfg.DigestAt, len(b.cfg.DigestChats), headline, b.cfg.DigestStatePath)
 		go b.runDigests(ctx)
 	}
 
@@ -154,7 +168,7 @@ func (b *Bot) onText(ctx context.Context, msg *models.Message) {
 		if msg.Chat.Type != models.ChatTypePrivate {
 			text = speaker(msg) + ": " + text
 		}
-		b.ask(ctx, chatID, msg.From.ID, text)
+		b.ask(ctx, chatID, msg.From.ID, speaker(msg), text)
 	case "start", "help":
 		b.sendHTML(ctx, chatID, helpText(b.agent != nil, admin))
 	case "reset":
@@ -162,6 +176,8 @@ func (b *Bot) onText(ctx context.Context, msg *models.Message) {
 			b.agent.Reset(chatID)
 		}
 		b.sendHTML(ctx, chatID, "Conversa reiniciada.")
+	case "cost":
+		b.sendHTML(ctx, chatID, costReport(b.ledger, time.Now(), msg.From.ID, admin, b.cfg.DailyBudget))
 	case "digest":
 		log.Printf("%s → /digest", who(requester{chatID: chatID, userID: msg.From.ID}))
 		stop := b.typing(ctx, chatID)
@@ -229,15 +245,24 @@ func (b *Bot) runCommand(ctx context.Context, chatID, userID int64, cmd command,
 	}
 }
 
-func (b *Bot) ask(ctx context.Context, chatID, userID int64, text string) {
+func (b *Bot) ask(ctx context.Context, chatID, userID int64, name, text string) {
 	if b.agent == nil {
 		b.sendHTML(ctx, chatID, helpText(false, b.cfg.IsAdmin(userID)))
+		return
+	}
+	if spent, over := b.budgetSpent(time.Now()); over {
+		log.Printf("%s: refused, the daily budget is spent ($%.4f of $%.2f)",
+			who(requester{chatID: chatID, userID: userID}), spent, b.cfg.DailyBudget)
+		b.sendHTML(ctx, chatID, budgetMessage(b.cfg.DailyBudget, spent))
 		return
 	}
 
 	stop := b.typing(ctx, chatID)
 	answer, used, err := b.agent.Ask(ctx, chatID, userID, text)
 	stop()
+	if used.steps > 0 {
+		b.record(entryOf(time.Now(), kindQuestion, chatID, userID, name, used, err != nil))
+	}
 
 	switch {
 	case errors.Is(err, errBusy):

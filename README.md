@@ -110,6 +110,7 @@ bot, for its own variables) after changing any of them.
 | `HOMELAB_MCP_HTTP_ADDR` + `HOMELAB_MCP_HTTP_TOKEN` | **required** — the address it listens on and the token it demands | [below](#over-http-instead) |
 | `TELEGRAM_BOT_TOKEN` + `TELEGRAM_ALLOWED_USER_IDS` | the Telegram bot, a separate binary — read by it, not by the server | [docs/modules/telegram.md](docs/modules/telegram.md#2-the-env) |
 | `TELEGRAM_ADMIN_USER_IDS` | the bot's users who may also remove, stop, restart and reconfigure — the rest read and add | [docs/modules/telegram.md](docs/modules/telegram.md#admins) |
+| `TELEGRAM_DAILY_BUDGET_USD` | the most a day of the bot's natural language may cost before it pauses until midnight | [docs/modules/telegram.md](docs/modules/telegram.md#spending-cost-and-the-daily-budget) |
 | `TELEGRAM_DIGEST_AT` | when the bot sends the admins its daily digest — `17:00` unless set, `off` for never | [docs/modules/telegram.md](docs/modules/telegram.md#the-daily-digest) |
 
 ### A `.env` file

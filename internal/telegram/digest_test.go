@@ -310,7 +310,7 @@ func newDigestBot(t *testing.T, mcpURL string, claude *fakeClaude) (*Bot, *fakeB
 	t.Cleanup(m.Close)
 
 	b := &Bot{
-		cfg: Config{DigestState: filepath.Join(t.TempDir(), "digest.json")},
+		cfg: Config{DigestStatePath: filepath.Join(t.TempDir(), "digest.json")},
 		mcp: m,
 		tg:  tg,
 	}
@@ -363,7 +363,7 @@ func TestScheduledDigestSendsAndRecords(t *testing.T) {
 		t.Errorf("the headline was not asked from the report as plain text: %s", report)
 	}
 
-	state, err := loadDigestState(b.cfg.DigestState)
+	state, err := loadDigestState(b.cfg.DigestStatePath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -382,7 +382,7 @@ func TestDigestOnRequestIsNotRecorded(t *testing.T) {
 	if !strings.Contains(got, "📋 <b>Resumo diário</b>") || strings.Contains(got, "<i>O ") {
 		t.Errorf("without Claude the digest goes, headless:\n%s", got)
 	}
-	if _, err := os.Stat(b.cfg.DigestState); !os.IsNotExist(err) {
+	if _, err := os.Stat(b.cfg.DigestStatePath); !os.IsNotExist(err) {
 		t.Errorf("a /digest wrote the state: %v", err)
 	}
 }
@@ -427,7 +427,7 @@ func TestDigestReportsAServerWithoutTheTool(t *testing.T) {
 		!strings.Contains(got, "precisa ser atualizado") {
 		t.Errorf("the failure was not reported to the chat:\n%s", got)
 	}
-	if state, _ := loadDigestState(b.cfg.DigestState); state.LastScheduled.IsZero() || len(state.Snapshots) != 0 {
+	if state, _ := loadDigestState(b.cfg.DigestStatePath); state.LastScheduled.IsZero() || len(state.Snapshots) != 0 {
 		t.Errorf("a failed digest should count as sent, with nothing to compare: %+v", state)
 	}
 }
@@ -442,14 +442,14 @@ func TestConfigDigest(t *testing.T) {
 		t.Fatal(err)
 	}
 	if cfg.DigestAt == nil || cfg.DigestAt.String() != "17:00" || fmt.Sprint(cfg.DigestChats) != "[42]" ||
-		cfg.DigestModel != "claude-haiku-5-5" || cfg.DigestState != "/var/state/homelab-telegram-bot/digest.json" {
-		t.Errorf("defaults: at %v, chats %v, model %s, state %s", cfg.DigestAt, cfg.DigestChats, cfg.DigestModel, cfg.DigestState)
+		cfg.DigestModel != "claude-haiku-5-5" || cfg.DigestStatePath != "/var/state/homelab-telegram-bot/digest.json" {
+		t.Errorf("defaults: at %v, chats %v, model %s, state %s", cfg.DigestAt, cfg.DigestChats, cfg.DigestModel, cfg.DigestStatePath)
 	}
 
-	base[DigestAtEnv], base[DigestChatsEnv], base[DigestStateEnv] = "off", "7, -100", "/tmp/d.json"
+	base[DigestAtEnv], base[DigestChatsEnv], base[DigestStatePathEnv] = "off", "7, -100", "/tmp/d.json"
 	setEnv(t, base)
-	if cfg, err = LoadConfig(); err != nil || cfg.DigestAt != nil || fmt.Sprint(cfg.DigestChats) != "[7 -100]" || cfg.DigestState != "/tmp/d.json" {
-		t.Errorf("explicit: at %v, chats %v, state %s, %v", cfg.DigestAt, cfg.DigestChats, cfg.DigestState, err)
+	if cfg, err = LoadConfig(); err != nil || cfg.DigestAt != nil || fmt.Sprint(cfg.DigestChats) != "[7 -100]" || cfg.DigestStatePath != "/tmp/d.json" {
+		t.Errorf("explicit: at %v, chats %v, state %s, %v", cfg.DigestAt, cfg.DigestChats, cfg.DigestStatePath, err)
 	}
 
 	base[DigestAtEnv], base[DigestChatsEnv] = "5pm", "99, -200"

@@ -388,7 +388,7 @@ func TestAnswerEndsWithItsCost(t *testing.T) {
 	)
 	b, api := newAskBot(t, claude)
 
-	b.ask(context.Background(), 1, 42, "como está?")
+	b.ask(context.Background(), 1, 42, "Pedro", "como está?")
 
 	// Two steps at claude-opus-5-5's rates: 2 tokens in at $4, 2 out at $20.
 	want := "Tudo certo.\n\n<i>≈ US$ 0,0000 · 4 tokens: 2 entrada, 2 saída</i>"
@@ -404,7 +404,7 @@ func TestFailedTurnShowsWhatItCost(t *testing.T) {
 	)
 	b, api := newAskBot(t, claude)
 
-	b.ask(context.Background(), 1, 42, "como está?")
+	b.ask(context.Background(), 1, 42, "Pedro", "como está?")
 
 	got := api.texts()
 	if !strings.HasPrefix(got, "⚠️ claude:") ||

@@ -80,7 +80,9 @@ ANTHROPIC_API_KEY=sk-ant-...        # optional: without it, commands only
 | `TELEGRAM_DIGEST_AT` | `17:00` | when the [daily digest](#the-daily-digest) goes out, local time; `off` turns it off |
 | `TELEGRAM_DIGEST_CHAT_IDS` | the admins | who gets it — user ids for private chats, negative ids for groups, each already allowed above |
 | `TELEGRAM_DIGEST_MODEL` | `claude-haiku-5-5` | writes the digest's headline, when natural language is on |
-| `TELEGRAM_DIGEST_STATE` | see below | the file the digest keeps its totals in |
+| `TELEGRAM_DIGEST_STATE_PATH` | see below | the file the digest keeps its totals in |
+| `TELEGRAM_DAILY_BUDGET_USD` | — | the most a day's model responses may cost before natural language pauses until midnight — see [Spending](#spending-cost-and-the-daily-budget) |
+| `TELEGRAM_LEDGER_PATH` | beside the digest's file | the file every model response's cost is kept in |
 
 The bot declares elicitation, so the server asks it, per command, before every
 write — there is no setting on either side that skips that.
@@ -177,7 +179,8 @@ journalctl -u homelab-telegram-bot -f
 The `User=` needs no `docker` group: the bot touches nothing on the host. To
 update, `make deploy-bot`. `StateDirectory=` gives it
 `/var/lib/homelab-telegram-bot`, owned by that user, for the
-[daily digest](#the-daily-digest)'s file.
+[daily digest](#the-daily-digest)'s file and the [spending
+ledger](#spending-cost-and-the-daily-budget).
 
 It needs no inbound port. Long polling only opens connections outwards, to
 `api.telegram.org` and `api.anthropic.com`, so it works on a host that is
@@ -202,6 +205,7 @@ reachable only on the tailnet.
 | `/sessions` | `jellyfin_active_sessions` |
 | `/search <title>` | `radarr_movie_lookup`, `sonarr_series_lookup` — whichever the server registered |
 | `/digest` | the [daily digest](#the-daily-digest), now |
+| `/cost` | what Claude has cost today, in 7 and in 30 days — see [Spending](#spending-cost-and-the-daily-budget) |
 | `/reset` | forgets the conversation |
 | `/help` | the list |
 
@@ -306,8 +310,54 @@ model's own rate — 0.1× input on most, 0.05× on Opus 5.5 and Sonnet 5.5, 0.0
 on Fable and Mythos 5.1. Haiku 5.5 is the one model priced by prompt length: a
 request whose prompt — input, cache reads and writes together — is over 100,000
 tokens pays five times the rates for all of it. When a fallback answered, each attempt is priced at the rates
-of the model that ran it, from `usage.iterations`. The running total resets
-when the process restarts.
+of the model that ran it, from `usage.iterations`. The journal's running total
+resets when the process restarts; the [ledger](#spending-cost-and-the-daily-budget)
+does not.
+
+### Spending, `/cost` and the daily budget
+
+Every response a model writes — an answer, a turn that failed after some
+steps, a digest's headline — is one JSON line in `TELEGRAM_LEDGER_PATH`: when, who,
+in which chat, the models, the tokens by kind and the estimated dollars. By
+default it is `spend.jsonl` beside the digest's file, in `StateDirectory=` with
+the unit above. It is appended to, never rewritten while the bot runs; on
+startup, lines older than 90 days are dropped, along with any line it cannot
+read (the log counts those). A file that cannot be written is logged and the
+bot goes on with the ledger in memory — the budget still holds until the next
+restart, which forgets what that day had cost.
+
+`/cost` reads it:
+
+```
+💲 Gastos com o Claude (estimativa a preço de tabela)
+
+Hoje: US$ 0,2500 · 2 respostas · 12,1 mil tokens
+7 dias: US$ 0,5504 · 4 respostas · 33,1 mil tokens
+30 dias: US$ 2,55 · 5 respostas · 1,5 mi tokens
+
+Por pessoa, 30 dias
+• Ana: US$ 2,00 · 1
+• Pedro: US$ 0,5500 · 3
+• resumo diário: US$ 0,0004 · 1
+
+Teto diário: US$ 1,00 — 25% usado hoje
+```
+
+The days are calendar days on the bot's clock: *Hoje* starts at midnight, and
+*7 dias* is today and the six before it. Admins see who spent it; anyone else
+sees their own share in its place (*"Você, em 30 dias: …"*). A response from a
+model the price table does not know is counted but adds nothing, and the report
+says how many were left out of the sum.
+
+**`TELEGRAM_DAILY_BUDGET_USD`** puts a ceiling on a day: once today's ledger
+reaches it, a question in plain words is answered with *"O teto diário de US$
+1,00 já foi gasto (US$ 1,04 hoje)…"*, and Claude is not asked. Commands,
+approvals already on the screen, `/cost` and the daily digest go on — the
+digest without its headline, which is the one call it makes to a model. The
+budget is checked before a turn, not during one: a turn's cost is known only
+once it ends, so the turn that crosses the line finishes and the next one is
+refused. It applies to everyone, admins included, and lifts at midnight. Unset,
+there is no ceiling. `1.50` and `1,50` both mean a dollar and a half.
 
 A reply that contains tool-call markup — a call the model wrote out as text
 instead of making, which never ran — is logged with its first 400 characters.
@@ -373,7 +423,7 @@ to a JSON file, keeping the last 30, and the next digest reads them back:
   last week to now. It needs at least 20 hours of history, and says nothing
   for a filesystem that would take more than 90 days.
 
-The file is `TELEGRAM_DIGEST_STATE` if set, otherwise `digest.json` in
+The file is `TELEGRAM_DIGEST_STATE_PATH` if set, otherwise `digest.json` in
 systemd's `StateDirectory=` (`/var/lib/homelab-telegram-bot`, with the unit
 above), then `$XDG_STATE_HOME/homelab-telegram-bot/`, then
 `~/.local/state/homelab-telegram-bot/`. It is written whole and renamed into
@@ -486,6 +536,8 @@ through Telegram, from anywhere.
 | "Linguagem natural está desligada" | No `ANTHROPIC_API_KEY` in the bot's environment |
 | An approval shows "Expirou sem resposta" | Nobody pressed within `TELEGRAM_APPROVAL_TIMEOUT`; nothing was done |
 | "Ainda estou no pedido anterior" | The previous question is still running, usually waiting on an approval further up the chat |
+| "O teto diário de US$ … já foi gasto" | Today's model responses reached `TELEGRAM_DAILY_BUDGET_USD`. Commands still work; natural language comes back at midnight, or sooner with a higher budget and a restart |
+| `/cost` forgot the past after a restart | The ledger could not be opened or written — the startup log says `keeping it in memory`. Check that the unit has `StateDirectory=` or that `TELEGRAM_LEDGER_PATH` is writable |
 | No digest at 17:00 | The startup log says why: `TELEGRAM_DIGEST_AT=off`, or nobody to send it to — no `TELEGRAM_ADMIN_USER_IDS` and no `TELEGRAM_DIGEST_CHAT_IDS`. A bot first started after the hour waits for the next day |
 | "o servidor não tem homelab_daily_digest" | The server is older than the bot: `make deploy` it too |
 | The digest never says "desde ontem" | No scheduled digest has been recorded yet, or the state file cannot be written — the log says `tomorrow's will not compare with today's` |

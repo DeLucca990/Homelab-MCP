@@ -17,7 +17,8 @@ func setEnv(t *testing.T, kv map[string]string) {
 	t.Helper()
 	for _, k := range []string{TokenEnv, AllowedUsersEnv, AdminUsersEnv, AllowedChatsEnv, MCPURLEnv, ModelEnv, EffortEnv,
 		ApprovalTimeoutEnv, mcpAddrEnv, mcpTokenEnv, anthropicKeyEnv, anthropicTokenEnv,
-		DigestAtEnv, DigestChatsEnv, DigestModelEnv, DigestStateEnv, "STATE_DIRECTORY", "XDG_STATE_HOME"} {
+		DigestAtEnv, DigestChatsEnv, DigestModelEnv, DigestStatePathEnv, DailyBudgetEnv, LedgerPathEnv,
+		"STATE_DIRECTORY", "XDG_STATE_HOME"} {
 		t.Setenv(k, kv[k])
 	}
 }

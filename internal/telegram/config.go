@@ -3,6 +3,7 @@ package telegram
 import (
 	"fmt"
 	"log"
+	"math"
 	"net"
 	"os"
 	"path/filepath"
@@ -24,7 +25,9 @@ const (
 	DigestAtEnv        = "TELEGRAM_DIGEST_AT"
 	DigestChatsEnv     = "TELEGRAM_DIGEST_CHAT_IDS"
 	DigestModelEnv     = "TELEGRAM_DIGEST_MODEL"
-	DigestStateEnv     = "TELEGRAM_DIGEST_STATE"
+	DigestStatePathEnv = "TELEGRAM_DIGEST_STATE_PATH"
+	DailyBudgetEnv     = "TELEGRAM_DAILY_BUDGET_USD"
+	LedgerPathEnv      = "TELEGRAM_LEDGER_PATH"
 
 	mcpAddrEnv  = "HOMELAB_MCP_HTTP_ADDR"
 	mcpTokenEnv = "HOMELAB_MCP_HTTP_TOKEN"
@@ -59,10 +62,13 @@ type Config struct {
 
 	ApprovalTimeout time.Duration
 
-	DigestAt    *DailyAt
-	DigestChats []int64
-	DigestModel string
-	DigestState string
+	DigestAt        *DailyAt
+	DigestChats     []int64
+	DigestModel     string
+	DigestStatePath string
+
+	LedgerPath  string
+	DailyBudget float64
 }
 
 type DailyAt struct{ Hour, Minute int }
@@ -162,6 +168,16 @@ func LoadConfig() (Config, error) {
 	}
 
 	problems = append(problems, cfg.loadDigest()...)
+	problems = append(problems, cfg.loadFiles()...)
+
+	if raw := env(DailyBudgetEnv); raw != "" {
+		v, err := strconv.ParseFloat(strings.Replace(raw, ",", ".", 1), 64)
+		if err != nil || !(v > 0) || math.IsInf(v, 0) {
+			problems = append(problems, fmt.Sprintf("%s=%q: must be a positive amount of dollars such as 1.50", DailyBudgetEnv, raw))
+		} else {
+			cfg.DailyBudget = v
+		}
+	}
 
 	if len(problems) > 0 {
 		return Config{}, fmt.Errorf("configuration:\n  - %s", strings.Join(problems, "\n  - "))
@@ -209,17 +225,26 @@ func (c *Config) loadDigest() []string {
 		slices.Sort(c.DigestChats)
 	}
 
-	c.DigestState = env(DigestStateEnv)
-	if c.DigestState == "" {
-		dir, err := stateDir()
-		if err != nil {
-			problems = append(problems, fmt.Sprintf("%s is not set and there is no directory to keep "+
-				"the digest's totals in (%v): set it to a file path", DigestStateEnv, err))
-		} else {
-			c.DigestState = filepath.Join(dir, "digest.json")
-		}
-	}
 	return problems
+}
+
+func (c *Config) loadFiles() []string {
+	c.DigestStatePath, c.LedgerPath = env(DigestStatePathEnv), env(LedgerPathEnv)
+	if c.DigestStatePath != "" && c.LedgerPath != "" {
+		return nil
+	}
+	dir, err := stateDir()
+	if err != nil {
+		return []string{fmt.Sprintf("there is no directory to keep the bot's files in (%v): "+
+			"set %s and %s to file paths", err, DigestStatePathEnv, LedgerPathEnv)}
+	}
+	if c.DigestStatePath == "" {
+		c.DigestStatePath = filepath.Join(dir, "digest.json")
+	}
+	if c.LedgerPath == "" {
+		c.LedgerPath = filepath.Join(dir, "spend.jsonl")
+	}
+	return nil
 }
 
 func stateDir() (string, error) {

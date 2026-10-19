@@ -188,7 +188,7 @@ func (b *Bot) runDigests(ctx context.Context) {
 	at := *b.cfg.DigestAt
 	var last time.Time
 	for {
-		state, err := loadDigestState(b.cfg.DigestState)
+		state, err := loadDigestState(b.cfg.DigestStatePath)
 		if err != nil {
 			log.Printf("daily digest: %v", err)
 		}
@@ -216,7 +216,7 @@ func (b *Bot) sendDigest(ctx context.Context, chats []int64, scheduled bool) {
 	ctx, cancel := context.WithTimeout(ctx, digestBudget)
 	defer cancel()
 
-	state, err := loadDigestState(b.cfg.DigestState)
+	state, err := loadDigestState(b.cfg.DigestStatePath)
 	if err != nil {
 		log.Printf("daily digest: comparing with nothing: %v", err)
 	}
@@ -239,7 +239,7 @@ func (b *Bot) sendDigest(ctx context.Context, chats []int64, scheduled bool) {
 	if totals != nil {
 		state.record(now, *totals)
 	}
-	if err := state.save(b.cfg.DigestState); err != nil {
+	if err := state.save(b.cfg.DigestStatePath); err != nil {
 		log.Printf("daily digest: tomorrow's will not compare with today's: %v", err)
 	}
 }
@@ -260,7 +260,10 @@ func (b *Bot) digestText(ctx context.Context, state digestState, now time.Time) 
 
 	body := renderDigest(d, state, now)
 	headline := ""
-	if b.headliner != nil {
+	if spent, over := b.budgetSpent(now); over && b.headliner != nil {
+		log.Printf("daily digest: going out without a headline, the daily budget is spent ($%.4f of $%.2f)",
+			spent, b.cfg.DailyBudget)
+	} else if b.headliner != nil {
 		var used spend
 		headline, used, err = b.headliner.headline(ctx, plainText(parseHTML(body)))
 		label := "manchete"
@@ -269,6 +272,7 @@ func (b *Bot) digestText(ctx context.Context, state digestState, now time.Time) 
 			label = "manchete que falhou"
 		}
 		if used.steps > 0 {
+			b.record(entryOf(now, kindHeadline, 0, 0, "", used, err != nil))
 			body += "\n\n" + usageLine(used, label)
 		}
 	}
