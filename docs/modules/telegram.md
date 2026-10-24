@@ -177,7 +177,7 @@ journalctl -u homelab-telegram-bot -f
 ```
 
 The `User=` needs no `docker` group: the bot touches nothing on the host. To
-update, `make deploy-bot`. `StateDirectory=` gives it
+update, `make build && sudo systemctl restart homelab-telegram-bot`. `StateDirectory=` gives it
 `/var/lib/homelab-telegram-bot`, owned by that user, for the
 [daily digest](#the-daily-digest)'s file and the [spending
 ledger](#spending-cost-and-the-daily-budget).
@@ -548,7 +548,7 @@ through Telegram, from anywhere.
 | "O teto diário de US$ … já foi gasto" | Today's model responses reached `TELEGRAM_DAILY_BUDGET_USD`. Commands still work; natural language comes back at midnight, or sooner with a higher budget and a restart |
 | `/cost` forgot the past after a restart | The ledger could not be opened or written — the startup log says `keeping it in memory`. Check that the unit has `StateDirectory=` or that `TELEGRAM_LEDGER_PATH` is writable |
 | No digest at 17:00 | The startup log says why: `TELEGRAM_DIGEST_AT=off`, or nobody to send it to — no `TELEGRAM_ADMIN_USER_IDS` and no `TELEGRAM_DIGEST_CHAT_IDS`. A bot first started after the hour waits for the next day |
-| "o servidor não tem homelab_daily_digest" | The server is older than the bot: `make deploy` it too |
+| "o servidor não tem homelab_daily_digest" | The server is older than the bot: update it too |
 | The digest never says "desde ontem" | No scheduled digest has been recorded yet, or the state file cannot be written — the log says `tomorrow's will not compare with today's` |
 
 Over HTTP, the go-sdk closes a client session on any error status — an

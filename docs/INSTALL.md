@@ -12,7 +12,7 @@ Desktop it would report the desktop's VM.
 
 ## The `.env`
 
-One file for both containers, the same variables as [outside Docker](../README.md#configuration),
+One file for both containers, the same variables as [outside Docker](DETAILS.md#configuration),
 plus one:
 
 ```sh

@@ -5,3 +5,4 @@ bin
 docs
 *.md
 .DS_Store
+assets

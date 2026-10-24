@@ -116,7 +116,7 @@ restart your MCP client after changing it.
 > ⚠️ **Running over SSH? The `env` block above does not reach the server.** It
 > sets variables for the local `ssh` process, and SSH does not forward arbitrary
 > variables. Put them in the remote command instead, or use a `.env` on the
-> remote machine — see the [README](../../README.md#configuration).
+> remote machine — see the [DETAILS](../DETAILS.md#configuration).
 
 ### `docker_container_exec`
 
