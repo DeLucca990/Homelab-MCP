@@ -9,13 +9,13 @@ import (
 	"syscall"
 	_ "time/tzdata"
 
-	"github.com/DeLucca990/homelab-mcp/internal/dotenv"
-	mcpserver "github.com/DeLucca990/homelab-mcp/internal/mcp"
+	"github.com/DeLucca990/nautilus/internal/dotenv"
+	mcpserver "github.com/DeLucca990/nautilus/internal/mcp"
 )
 
 func main() {
 	log.SetOutput(os.Stderr)
-	log.SetPrefix("[homelab-mcp] ")
+	log.SetPrefix("[nautilus-mcp] ")
 
 	dotenv.LoadEnvVariables()
 

@@ -25,8 +25,8 @@ import (
 // anonymously by accident.
 
 const (
-	HTTPAddrEnv  = "HOMELAB_MCP_HTTP_ADDR"
-	HTTPTokenEnv = "HOMELAB_MCP_HTTP_TOKEN"
+	HTTPAddrEnv  = "NAUTILUS_HTTP_ADDR"
+	HTTPTokenEnv = "NAUTILUS_HTTP_TOKEN"
 )
 
 const HTTPPath = "/mcp"
@@ -118,7 +118,7 @@ func requireBearer(token string, next http.Handler) http.Handler {
 			subtle.ConstantTimeCompare([]byte(strings.TrimSpace(presented)), expected) == 1
 
 		if !ok {
-			w.Header().Set("WWW-Authenticate", `Bearer realm="homelab-mcp"`)
+			w.Header().Set("WWW-Authenticate", `Bearer realm="nautilus"`)
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			log.Printf("http: rejected an unauthenticated request from %s", r.RemoteAddr)
 			return

@@ -18,7 +18,7 @@ import (
 
 	// Test-only: the bot itself reaches the digest over MCP and imports
 	// nothing from the server. This holds its mirror to the server's JSON.
-	"github.com/DeLucca990/homelab-mcp/internal/digest"
+	"github.com/DeLucca990/nautilus/internal/digest"
 )
 
 func ptr[T any](v T) *T { return &v }
@@ -418,7 +418,7 @@ func TestRefusedHeadlineStillShowsItsCost(t *testing.T) {
 }
 
 func TestDigestReportsAServerWithoutTheTool(t *testing.T) {
-	url, _ := newCommandServer(t) // a server without homelab_daily_digest
+	url, _ := newCommandServer(t) // a server without nautilus_daily_digest
 	b, api := newDigestBot(t, url, nil)
 
 	b.sendDigest(context.Background(), []int64{42}, true)
@@ -442,7 +442,7 @@ func TestConfigDigest(t *testing.T) {
 		t.Fatal(err)
 	}
 	if cfg.DigestAt == nil || cfg.DigestAt.String() != "17:00" || fmt.Sprint(cfg.DigestChats) != "[42]" ||
-		cfg.DigestModel != "claude-haiku-5-5" || cfg.DigestStatePath != "/var/state/homelab-telegram-bot/digest.json" {
+		cfg.DigestModel != "claude-haiku-5-5" || cfg.DigestStatePath != "/var/state/nautilus-bot/digest.json" {
 		t.Errorf("defaults: at %v, chats %v, model %s, state %s", cfg.DigestAt, cfg.DigestChats, cfg.DigestModel, cfg.DigestStatePath)
 	}
 

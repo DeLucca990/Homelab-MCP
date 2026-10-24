@@ -174,14 +174,14 @@ func TestHTMLCutsLongLines(t *testing.T) {
 
 func TestParseCommand(t *testing.T) {
 	for in, want := range map[string][3]string{
-		"/status":                       {"status", "", ""},
-		"/Status@homelab_bot":           {"status", "homelab_bot", ""},
-		"/queue now":                    {"queue", "", "now"},
-		"is the disk full?":             {"", "", ""},
-		"  /help":                       {"help", "", ""},
-		"/logs jellyfin 50":             {"logs", "", "jellyfin 50"},
-		"/logs@homelab_bot   jellyfin ": {"logs", "homelab_bot", "jellyfin"},
-		"/search\nDuna 2021":            {"search", "", "Duna 2021"},
+		"/status":                        {"status", "", ""},
+		"/Status@nautilus_bot":           {"status", "nautilus_bot", ""},
+		"/queue now":                     {"queue", "", "now"},
+		"is the disk full?":              {"", "", ""},
+		"  /help":                        {"help", "", ""},
+		"/logs jellyfin 50":              {"logs", "", "jellyfin 50"},
+		"/logs@nautilus_bot   jellyfin ": {"logs", "nautilus_bot", "jellyfin"},
+		"/search\nDuna 2021":             {"search", "", "Duna 2021"},
 	} {
 		if name, target, rest := parseCommand(in); name != want[0] || target != want[1] || rest != want[2] {
 			t.Errorf("parseCommand(%q) = %q, %q, %q, want %q, %q, %q", in, name, target, rest, want[0], want[1], want[2])
@@ -204,14 +204,14 @@ func TestAddressed(t *testing.T) {
 		{"private is always addressed", models.Message{Chat: models.Chat{Type: models.ChatTypePrivate}, Text: "oi"}, "oi", true},
 		{"plain group chatter", models.Message{Chat: group, Text: "bora jogar?"}, "", false},
 		{"bare command", models.Message{Chat: group, Text: "/status"}, "/status", true},
-		{"command for this bot", models.Message{Chat: group, Text: "/status@Homelab_Bot"}, "/status@Homelab_Bot", true},
+		{"command for this bot", models.Message{Chat: group, Text: "/status@Nautilus_Bot"}, "/status@Nautilus_Bot", true},
 		{"command for another bot", models.Message{Chat: group, Text: "/status@other_bot"}, "/status@other_bot", false},
-		{"mention, removed from the text", models.Message{Chat: group, Text: "@homelab_bot como está o disco?"}, "como está o disco?", true},
-		{"mention mid-sentence", models.Message{Chat: group, Text: "ei @HOMELAB_BOT, reinicia o jellyfin"}, "ei , reinicia o jellyfin", true},
+		{"mention, removed from the text", models.Message{Chat: group, Text: "@nautilus_bot como está o disco?"}, "como está o disco?", true},
+		{"mention mid-sentence", models.Message{Chat: group, Text: "ei @NAUTILUS_BOT, reinicia o jellyfin"}, "ei , reinicia o jellyfin", true},
 		{"reply to the bot", models.Message{Chat: group, Text: "e a memória?", ReplyToMessage: fromBot}, "e a memória?", true},
 		{"reply to someone else", models.Message{Chat: group, Text: "concordo", ReplyToMessage: fromFriend}, "", false},
 	} {
-		text, ok := addressed(&tc.msg, "homelab_bot", botID)
+		text, ok := addressed(&tc.msg, "nautilus_bot", botID)
 		if ok != tc.match || (ok && text != tc.text) {
 			t.Errorf("%s: got %q, %v; want %q, %v", tc.name, text, ok, tc.text, tc.match)
 		}

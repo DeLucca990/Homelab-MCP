@@ -164,7 +164,7 @@ or configuration error is a login that is still wrong.
 
 ## In the overview
 
-`homelab_overview` gets a `bazarr` section wherever the module is configured,
+`nautilus_overview` gets a `bazarr` section wherever the module is configured,
 from the health collector alone:
 
 ```

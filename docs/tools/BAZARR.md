@@ -22,7 +22,7 @@ Design notes: [docs/modules/bazarr.md](../modules/bazarr.md).
 | --- | --- |
 | `SERVER_URL` | the server the services run on: `http://localhost` when this binary runs on that same machine, otherwise `http://10.0.0.4` or `https://media.example.com/bazarr` |
 | `BAZARR_API_KEY` | Bazarr → Settings → General → Security → API Key |
-| `HOMELAB_MCP_BAZARR_READONLY` | set to `1` to drop the five writes, leaving the four reads |
+| `NAUTILUS_BAZARR_READONLY` | set to `1` to drop the five writes, leaving the four reads |
 
 Without the first two, **none of these tools are registered**. `SERVER_URL` is
 the same variable the other services read, and each fills in its own port —
@@ -66,7 +66,7 @@ passed through as typed: it is resolved against the list the instance has, by
 code, three-letter code or name, and the usual spellings of the invented codes
 (`pt-BR`, `pt_br`, `pob`, `es-419`, `zh-TW`) are mapped onto them. Anything that
 does not resolve is refused with the list of enabled languages, rather than
-guessed at. `homelab://bazarr/language-profiles` lists them.
+guessed at. `nautilus://bazarr/language-profiles` lists them.
 
 ---
 

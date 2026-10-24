@@ -73,7 +73,7 @@ here states the size of what is about to happen rather than just its name.
 | --- | --- |
 | `SERVER_URL` | the server the services run on: `http://localhost` when this binary runs on that same machine, otherwise `http://10.0.0.4` |
 | `SONARR_API_KEY` | Sonarr → Settings → General → Security → API Key |
-| `HOMELAB_MCP_SONARR_READONLY` | set to `1` to drop the nine writes, leaving monitoring only |
+| `NAUTILUS_SONARR_READONLY` | set to `1` to drop the nine writes, leaving monitoring only |
 
 Without both of the first two, **none of these tools are registered** — a server
 with no Sonarr configured cannot be asked to reach one. Both belong on the

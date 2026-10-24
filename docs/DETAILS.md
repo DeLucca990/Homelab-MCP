@@ -13,8 +13,8 @@ one page per family:
 
 | Family | Tools | Reference |
 | --- | --- | --- |
-| **Overview** | one call that checks every family below and reports only what is wrong | [docs/tools/README.md](tools/README.md#homelab_overview) |
-| **Digest** | the same over the last day: what arrived, failed, is late or restarted, and the totals to compare with tomorrow | [docs/tools/README.md](tools/README.md#homelab_daily_digest) |
+| **Overview** | one call that checks every family below and reports only what is wrong | [docs/tools/README.md](tools/README.md#nautilus_overview) |
+| **Digest** | the same over the last day: what arrived, failed, is late or restarted, and the totals to compare with tomorrow | [docs/tools/README.md](tools/README.md#nautilus_daily_digest) |
 | **System** | host info, CPU, memory, disk, systemd units | [docs/tools/SYSTEM.md](tools/SYSTEM.md) |
 | **Docker** | container status, logs, and — opt-in — exec and restart | [docs/tools/DOCKER.md](tools/DOCKER.md) |
 | **Radarr** | library, queue, lookup, health, interactive search, import, history, calendar, and seven writes | [docs/tools/RADARR.md](tools/RADARR.md) |
@@ -30,7 +30,7 @@ diagnose something in — *[triage](tools/PROMPTS.md#triage)* and
 *[why-no-download](tools/PROMPTS.md#why-no-download)* — and **resources**, which hold the
 reference data the tools accept: the [quality profiles and root
 folders](tools/RESOURCES.md) each `*arr` actually has, and
-[what this install registered](tools/RESOURCES.md#homelabserverconfiguration) along with the
+[what this install registered](tools/RESOURCES.md#nautilusserverconfiguration) along with the
 variable that would enable whatever it did not.
 
 The point of the whole thing is the details a plain `df -h` / `docker ps` / a glance at
@@ -96,18 +96,18 @@ bot, for its own variables) after changing any of them.
 
 | Variable | Enables | Reference |
 | --- | --- | --- |
-| `HOMELAB_MCP_ALLOW_CONTAINER_NAMES` | `docker_container_exec`, `docker_container_restart` | [docs/tools/DOCKER.md](tools/DOCKER.md#turning-them-on) |
+| `NAUTILUS_ALLOW_CONTAINER_NAMES` | `docker_container_exec`, `docker_container_restart` | [docs/tools/DOCKER.md](tools/DOCKER.md#turning-them-on) |
 | `SERVER_URL` + `RADARR_API_KEY` | the whole Radarr family | [docs/tools/RADARR.md](tools/RADARR.md#configuration) |
-| `HOMELAB_MCP_RADARR_READONLY` | drops Radarr's seven writes | [docs/tools/RADARR.md](tools/RADARR.md#configuration) |
+| `NAUTILUS_RADARR_READONLY` | drops Radarr's seven writes | [docs/tools/RADARR.md](tools/RADARR.md#configuration) |
 | `SERVER_URL` + `SONARR_API_KEY` | the whole Sonarr family | [docs/tools/SONARR.md](tools/SONARR.md#configuration) |
-| `HOMELAB_MCP_SONARR_READONLY` | drops Sonarr's nine writes | [docs/tools/SONARR.md](tools/SONARR.md#configuration) |
+| `NAUTILUS_SONARR_READONLY` | drops Sonarr's nine writes | [docs/tools/SONARR.md](tools/SONARR.md#configuration) |
 | `SERVER_URL` + `PROWLARR_API_KEY` | the whole Prowlarr family | [docs/tools/PROWLARR.md](tools/PROWLARR.md#configuration) |
-| `HOMELAB_MCP_PROWLARR_READONLY` | drops Prowlarr's four writes | [docs/tools/PROWLARR.md](tools/PROWLARR.md#configuration) |
+| `NAUTILUS_PROWLARR_READONLY` | drops Prowlarr's four writes | [docs/tools/PROWLARR.md](tools/PROWLARR.md#configuration) |
 | `SERVER_URL` + `JELLYFIN_API_KEY` | the whole Jellyfin family | [docs/tools/JELLYFIN.md](tools/JELLYFIN.md#configuration) |
-| `HOMELAB_MCP_JELLYFIN_READONLY` | drops Jellyfin's seven writes | [docs/tools/JELLYFIN.md](tools/JELLYFIN.md#configuration) |
+| `NAUTILUS_JELLYFIN_READONLY` | drops Jellyfin's seven writes | [docs/tools/JELLYFIN.md](tools/JELLYFIN.md#configuration) |
 | `SERVER_URL` + `BAZARR_API_KEY` | the whole Bazarr family | [docs/tools/BAZARR.md](tools/BAZARR.md#configuration) |
-| `HOMELAB_MCP_BAZARR_READONLY` | drops Bazarr's five writes | [docs/tools/BAZARR.md](tools/BAZARR.md#configuration) |
-| `HOMELAB_MCP_HTTP_ADDR` + `HOMELAB_MCP_HTTP_TOKEN` | **required** — the address it listens on and the token it demands | [below](#running-it) |
+| `NAUTILUS_BAZARR_READONLY` | drops Bazarr's five writes | [docs/tools/BAZARR.md](tools/BAZARR.md#configuration) |
+| `NAUTILUS_HTTP_ADDR` + `NAUTILUS_HTTP_TOKEN` | **required** — the address it listens on and the token it demands | [below](#running-it) |
 | `DOCKER_GID` | **required in Docker** — the host's `docker` group, which the server's container joins to reach the socket | [docs/INSTALL.md](INSTALL.md#the-env) |
 | `TELEGRAM_BOT_TOKEN` + `TELEGRAM_ALLOWED_USER_IDS` | the Telegram bot, a separate binary — read by it, not by the server | [docs/modules/telegram.md](modules/telegram.md#2-the-env) |
 | `TELEGRAM_ADMIN_USER_IDS` | the bot's users who may also remove, stop, restart and reconfigure — the rest read and add | [docs/modules/telegram.md](modules/telegram.md#admins) |
@@ -127,7 +127,7 @@ SONARR_API_KEY=your-sonarr-key
 JELLYFIN_API_KEY=your-jellyfin-key
 BAZARR_API_KEY=your-bazarr-key
 PROWLARR_API_KEY=your-prowlarr-key
-HOMELAB_MCP_ALLOW_CONTAINER_NAMES=jellyfin,sonarr,radarr
+NAUTILUS_ALLOW_CONTAINER_NAMES=jellyfin,sonarr,radarr
 ```
 
 One `SERVER_URL` serves every service because each fills in its own port — Radarr's 7878,
@@ -171,16 +171,16 @@ the `.env` itself `chmod 600` — the server does not check the permissions for 
 
 ### Checking whether it took
 
-The server states what it registered on startup, on stderr — `journalctl -u homelab-mcp` for a
+The server states what it registered on startup, on stderr — `journalctl -u nautilus-mcp` for a
 systemd install:
 
 ```
-[homelab-mcp] radarr at http://localhost:7878: read and write
-[homelab-mcp] sonarr at http://localhost:8989: read and write
-[homelab-mcp] jellyfin at http://localhost:8096: read and write
-[homelab-mcp] bazarr at http://localhost:6767: read and write
-[homelab-mcp] prowlarr at http://localhost:9696: read and write
-[homelab-mcp] MCP server running on transport streamable http at http://100.101.102.103:3000/mcp
+[nautilus-mcp] radarr at http://localhost:7878: read and write
+[nautilus-mcp] sonarr at http://localhost:8989: read and write
+[nautilus-mcp] jellyfin at http://localhost:8096: read and write
+[nautilus-mcp] bazarr at http://localhost:6767: read and write
+[nautilus-mcp] prowlarr at http://localhost:9696: read and write
+[nautilus-mcp] MCP server running on transport streamable http at http://100.101.102.103:3000/mcp
 ```
 
 A service missing from those lines was not configured, and its tools were never registered. If
@@ -189,7 +189,7 @@ the assistant says it has no way to act on something, that is why: it is telling
 The `.env` itself is read silently. Only a failure to read one is logged, and it is not fatal:
 
 ```
-[homelab-mcp] env file: /home/ubuntu/repos/Homelab-MCP/.env: unexpected character "\n" in variable name near "BROKEN LINE" — continuing without it
+[nautilus-mcp] env file: /home/ubuntu/repos/Homelab-MCP/.env: unexpected character "\n" in variable name near "BROKEN LINE" — continuing without it
 ```
 
 So a file that seems to have had no effect is either off the search path, or holds a variable
@@ -237,7 +237,7 @@ Setup, systemd unit, and how the approval buttons are bound to the person who as
 
 ## Running it
 
-The server speaks MCP over **Streamable HTTP** and logs to **stderr** with the `[homelab-mcp]`
+The server speaks MCP over **Streamable HTTP** and logs to **stderr** with the `[nautilus-mcp]`
 prefix. It is a long-lived process: one of it serves every client that can reach the address,
 so it is started by a service manager, never by a client.
 
@@ -245,13 +245,13 @@ Two variables are required, and it refuses to start without either:
 
 ```sh
 # .env, on the machine being monitored
-HOMELAB_MCP_HTTP_ADDR=100.101.102.103:3000   # this host's tailscale address
-HOMELAB_MCP_HTTP_TOKEN=<openssl rand -hex 32>
+NAUTILUS_HTTP_ADDR=100.101.102.103:3000   # this host's tailscale address
+NAUTILUS_HTTP_TOKEN=<openssl rand -hex 32>
 ```
 
 ```sh
 ./bin/server
-# [homelab-mcp] MCP server running on transport streamable http at http://100.101.102.103:3000/mcp
+# [nautilus-mcp] MCP server running on transport streamable http at http://100.101.102.103:3000/mcp
 ```
 
 **Write the host part explicitly.** A bare `:3000` binds every interface the machine has,
@@ -287,9 +287,9 @@ Nothing execs this binary, so something has to keep it alive across logout and r
 in a terminal and it dies with your SSH session:
 
 ```ini
-# /etc/systemd/system/homelab-mcp.service
+# /etc/systemd/system/nautilus-mcp.service
 [Unit]
-Description=Homelab MCP server
+Description=Nautilus MCP server
 After=network-online.target tailscaled.service
 Wants=network-online.target
 
@@ -304,8 +304,8 @@ WantedBy=multi-user.target
 ```
 
 ```sh
-sudo systemctl daemon-reload && sudo systemctl enable --now homelab-mcp
-journalctl -u homelab-mcp -f
+sudo systemctl daemon-reload && sudo systemctl enable --now nautilus-mcp
+journalctl -u nautilus-mcp -f
 ```
 
 No `EnvironmentFile` is needed: the binary finds the `.env` itself, next to the executable and
@@ -317,7 +317,7 @@ Binding a tailscale address races with `tailscaled` on boot, and the bind fails 
 failed start or two right after a reboot is expected. Binding `127.0.0.1` behind
 [`tailscale serve`](#behind-tailscale) avoids the race entirely.
 
-To update: `git pull && make build && sudo systemctl restart homelab-mcp`. Clients need no
+To update: `git pull && make build && sudo systemctl restart nautilus-mcp`. Clients need no
 attention, because there is no session for a restart to invalidate.
 
 #### It is sessionless, and that needs a current client
@@ -354,7 +354,7 @@ For a real TLS certificate and a name instead of an IP, bind loopback and put `t
 in front:
 
 ```sh
-# HOMELAB_MCP_HTTP_ADDR=127.0.0.1:8080
+# NAUTILUS_HTTP_ADDR=127.0.0.1:8080
 tailscale serve --bg --https=443 --set-path=/mcp http://127.0.0.1:8080/mcp
 ```
 
@@ -377,12 +377,12 @@ HTTP** in the UI, paste the URL from the startup line, and add an `Authorization
 #### Pointing clients at it
 
 The [Telegram bot](#on-telegram) is the client this runs with: it reads the same `.env` and finds
-the server from `HOMELAB_MCP_HTTP_ADDR` on its own. **Claude Code**, or any other client that
+the server from `NAUTILUS_HTTP_ADDR` on its own. **Claude Code**, or any other client that
 speaks HTTP natively, can be pointed at it too:
 
 ```sh
-claude mcp add --transport http homelab https://homelab.your-tailnet.ts.net/mcp \
-  --header "Authorization: Bearer $HOMELAB_MCP_HTTP_TOKEN"
+claude mcp add --transport http nautilus https://homelab.your-tailnet.ts.net/mcp \
+  --header "Authorization: Bearer $NAUTILUS_HTTP_TOKEN"
 ```
 
 ## Documentation

@@ -60,7 +60,7 @@ func newFakeServer(t *testing.T) *fakeServer {
 		})
 
 	server.AddResource(&sdk.Resource{
-		URI:         "homelab://thing/profiles",
+		URI:         "nautilus://thing/profiles",
 		Name:        "thing-profiles",
 		Description: "The profiles write_thing accepts.",
 	}, func(_ context.Context, req *sdk.ReadResourceRequest) (*sdk.ReadResourceResult, error) {

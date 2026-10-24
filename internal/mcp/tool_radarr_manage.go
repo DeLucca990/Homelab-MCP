@@ -9,7 +9,7 @@ import (
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/DeLucca990/homelab-mcp/internal/radarr"
+	"github.com/DeLucca990/nautilus/internal/radarr"
 )
 
 // RADARR RELEASES, IMPORT, EDIT, HISTORY AND CALENDAR TOOLS
@@ -235,7 +235,7 @@ func handleRadarrImport(
 type radarrEditInput struct {
 	MovieID             int      `json:"movie_id" jsonschema:"the movie, from radarr_library_status"`
 	Monitored           *bool    `json:"monitored,omitempty" jsonschema:"false stops Radarr searching for or upgrading it; the file stays"`
-	QualityProfile      string   `json:"quality_profile,omitempty" jsonschema:"by name — homelab://radarr/quality-profiles lists them"`
+	QualityProfile      string   `json:"quality_profile,omitempty" jsonschema:"by name — nautilus://radarr/quality-profiles lists them"`
 	MinimumAvailability string   `json:"minimum_availability,omitempty" jsonschema:"announced, inCinemas or released — when Radarr starts searching"`
 	AddTags             []string `json:"add_tags,omitempty" jsonschema:"existing Radarr tags, by label"`
 	RemoveTags          []string `json:"remove_tags,omitempty"`

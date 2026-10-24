@@ -1,4 +1,4 @@
-module github.com/DeLucca990/homelab-mcp
+module github.com/DeLucca990/nautilus
 
 go 1.26.4
 

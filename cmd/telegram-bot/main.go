@@ -9,13 +9,13 @@ import (
 	"syscall"
 	_ "time/tzdata"
 
-	"github.com/DeLucca990/homelab-mcp/internal/dotenv"
-	"github.com/DeLucca990/homelab-mcp/internal/telegram"
+	"github.com/DeLucca990/nautilus/internal/dotenv"
+	"github.com/DeLucca990/nautilus/internal/telegram"
 )
 
 func main() {
 	log.SetOutput(os.Stderr)
-	log.SetPrefix("[homelab-telegram] ")
+	log.SetPrefix("[nautilus-bot] ")
 
 	dotenv.LoadEnvVariables()
 

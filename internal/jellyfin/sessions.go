@@ -12,7 +12,7 @@ import (
 // Sessions is the one question no other tool on this server can answer: why the
 // CPU is busy.
 //
-// homelab_overview deliberately reports no CPU, because a media server
+// nautilus_overview deliberately reports no CPU, because a media server
 // transcoding looks exactly like one in trouble. This is the reading that tells
 // the two apart — and it does so at a finer grain than Jellyfin's own
 // "Transcode" label, which covers both a remux costing nothing and a 4K HEVC

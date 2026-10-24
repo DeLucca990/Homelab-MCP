@@ -222,7 +222,7 @@ func TestAdminOnly(t *testing.T) {
 func TestAgentReadsResource(t *testing.T) {
 	mcpServer := newFakeServer(t)
 	claude := newFakeClaude(t,
-		message("tool_use", `[{"type":"tool_use","id":"tu_1","name":"`+resourceTool+`","input":{"uri":"homelab://thing/profiles"}}]`),
+		message("tool_use", `[{"type":"tool_use","id":"tu_1","name":"`+resourceTool+`","input":{"uri":"nautilus://thing/profiles"}}]`),
 		message("end_turn", `[{"type":"text","text":"Use HD-1080p."}]`),
 	)
 	approvals, _ := newApprovalHarness("", 42, time.Second)
@@ -233,7 +233,7 @@ func TestAgentReadsResource(t *testing.T) {
 	}
 
 	tools, _ := json.Marshal(claude.requests[0]["tools"])
-	if !strings.Contains(string(tools), "homelab://thing/profiles — The profiles write_thing accepts.") {
+	if !strings.Contains(string(tools), "nautilus://thing/profiles — The profiles write_thing accepts.") {
 		t.Errorf("the resource is not described in the tool: %s", tools)
 	}
 	second, _ := json.Marshal(claude.requests[1]["messages"])

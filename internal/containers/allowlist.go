@@ -16,7 +16,7 @@ import (
 //
 // This is the only layer a confused client, an auto-approving client or a model
 // under prompt injection cannot get around.
-const AllowlistEnv = "HOMELAB_MCP_ALLOW_CONTAINER_NAMES"
+const AllowlistEnv = "NAUTILUS_ALLOW_CONTAINER_NAMES"
 
 // The read-only tools need no allowlist and ignore this entirely.
 func ActionAllowlist() []string { return parseAllowlist(os.Getenv(AllowlistEnv)) }

@@ -10,14 +10,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/DeLucca990/homelab-mcp/internal/bazarr"
-	"github.com/DeLucca990/homelab-mcp/internal/containers"
-	"github.com/DeLucca990/homelab-mcp/internal/jellyfin"
-	"github.com/DeLucca990/homelab-mcp/internal/overview"
-	"github.com/DeLucca990/homelab-mcp/internal/prowlarr"
-	"github.com/DeLucca990/homelab-mcp/internal/radarr"
-	"github.com/DeLucca990/homelab-mcp/internal/sonarr"
-	"github.com/DeLucca990/homelab-mcp/internal/system"
+	"github.com/DeLucca990/nautilus/internal/bazarr"
+	"github.com/DeLucca990/nautilus/internal/containers"
+	"github.com/DeLucca990/nautilus/internal/jellyfin"
+	"github.com/DeLucca990/nautilus/internal/overview"
+	"github.com/DeLucca990/nautilus/internal/prowlarr"
+	"github.com/DeLucca990/nautilus/internal/radarr"
+	"github.com/DeLucca990/nautilus/internal/sonarr"
+	"github.com/DeLucca990/nautilus/internal/system"
 )
 
 const (
@@ -43,7 +43,7 @@ type Digest struct {
 	Hours       int    `json:"hours"`
 	GeneratedAt string `json:"generated_at" jsonschema:"RFC 3339, in this server's local time"`
 
-	Attention []Finding `json:"attention,omitempty" jsonschema:"what homelab_overview reports as needing attention right now, one warning per entry"`
+	Attention []Finding `json:"attention,omitempty" jsonschema:"what nautilus_overview reports as needing attention right now, one warning per entry"`
 
 	RebootedSecondsAgo uint64           `json:"rebooted_seconds_ago,omitempty" jsonschema:"set when the host booted within the window"`
 	Containers         []ContainerEvent `json:"containers,omitempty" jsonschema:"containers that restarted, were recreated or stopped within the window, apart from those that came up with a reboot"`

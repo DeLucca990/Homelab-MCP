@@ -20,7 +20,7 @@ const BaseURLEnv = "SERVER_URL"
 
 const APIKeyEnv = "SONARR_API_KEY"
 
-const ReadOnlyEnv = "HOMELAB_MCP_SONARR_READONLY"
+const ReadOnlyEnv = "NAUTILUS_SONARR_READONLY"
 
 // serviceName is how this client names its service in an error.
 const serviceName = "sonarr"

@@ -7,7 +7,7 @@ import (
 // New builds the server with every tool registered.
 func New() *sdk.Server {
 	server := sdk.NewServer(&sdk.Implementation{
-		Name:    "homelab-monitor",
+		Name:    "nautilus",
 		Version: "1.0.0",
 	}, nil)
 

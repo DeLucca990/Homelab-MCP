@@ -18,7 +18,7 @@ type command struct {
 }
 
 var toolCommands = []command{
-	{name: "status", description: "O que precisa de atenção no servidor", tools: []string{"homelab_overview"}},
+	{name: "status", description: "O que precisa de atenção no servidor", tools: []string{"nautilus_overview"}},
 	{name: "disk", description: "Uso de disco e inodes", tools: []string{"system_disk_usage"}},
 	{name: "memory", description: "Memória e swap", tools: []string{"system_memory_stats"}},
 	{name: "docker", description: "Status dos containers", tools: []string{"docker_container_status"}},
@@ -115,7 +115,7 @@ func termArgs(rest string) (map[string]any, error) {
 
 func helpText(llm, admin bool) string {
 	var b strings.Builder
-	b.WriteString("<b>Homelab</b>\n\n")
+	b.WriteString("<b>Nautilus</b>\n\n")
 	for _, c := range append(toolCommands, otherCommands...) {
 		b.WriteString(escape(c.usageLine()) + " — " + escape(c.description) + "\n")
 	}

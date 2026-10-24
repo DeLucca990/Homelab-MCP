@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/DeLucca990/homelab-mcp/internal/system"
+	"github.com/DeLucca990/nautilus/internal/system"
 )
 
 // ErrUnavailable means there is no daemon to talk to. Distinct from a

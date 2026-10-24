@@ -26,7 +26,7 @@ key. Design notes:
 | --- | --- |
 | `SERVER_URL` | the server the services run on: `http://localhost` when this binary runs on that same machine, otherwise `http://10.0.0.4` or `https://media.example.com/jellyfin` |
 | `JELLYFIN_API_KEY` | Jellyfin → Dashboard → API Keys → **+** |
-| `HOMELAB_MCP_JELLYFIN_READONLY` | set to `1` to drop the seven writes, leaving the five reads |
+| `NAUTILUS_JELLYFIN_READONLY` | set to `1` to drop the seven writes, leaving the five reads |
 
 Without the first two, **none of these tools are registered**. `SERVER_URL` is the same variable
 Radarr and Sonarr read, and each fills in its own port — Jellyfin's is **8096**,
@@ -72,7 +72,7 @@ warning: 2 streams are being re-encoded at once (1 on the CPU, 1 on hardware) �
 transcodes are the load, and each new viewer adds another
 ```
 
-**This is the reading `homelab_overview` refuses to guess at.** The overview
+**This is the reading `nautilus_overview` refuses to guess at.** The overview
 leaves CPU out on purpose, because a media server transcoding and a media server
 in trouble look identical from a load average. This is what tells them apart.
 
@@ -183,7 +183,7 @@ short install.
 
 **The encoding warnings are marked `standing_warnings`** as well as appearing in
 `warnings`, because they describe how the server is configured rather than what
-is wrong with it now. That is why `homelab_overview` can report `jellyfin` as
+is wrong with it now. That is why `nautilus_overview` can report `jellyfin` as
 fine on a server this tool warns about: it was asked a different question, and a
 machine with no GPU would otherwise need attention every second of its life. The
 moment the configuration actually costs something, it shows up in the overview
@@ -248,7 +248,7 @@ internet, that is someone guessing passwords. Administrator key.
 
 | Parameter | Type | Meaning |
 | --- | --- | --- |
-| `library` | string | one library, by name (`homelab://jellyfin/libraries`) |
+| `library` | string | one library, by name (`nautilus://jellyfin/libraries`) |
 | `item_id` | string | one item, from `jellyfin_find_item` |
 
 Neither: every library. **Asks first**, naming the scope and its folders. The

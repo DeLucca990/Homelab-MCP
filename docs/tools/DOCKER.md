@@ -91,15 +91,15 @@ approval to the exact operation. The full reasoning is in
 
 ### Turning them on
 
-`HOMELAB_MCP_ALLOW_CONTAINER_NAMES` is a comma-separated list of container names
+`NAUTILUS_ALLOW_CONTAINER_NAMES` is a comma-separated list of container names
 — the `NAMES` column of `docker ps`, not the image and not the id:
 
 ```json
 {
   "mcpServers": {
-    "homelab": {
+    "nautilus": {
       "command": "/absolute/path/to/Homelab-MCP/bin/server",
-      "env": { "HOMELAB_MCP_ALLOW_CONTAINER_NAMES": "jellyfin,sonarr" }
+      "env": { "NAUTILUS_ALLOW_CONTAINER_NAMES": "jellyfin,sonarr" }
     }
   }
 }

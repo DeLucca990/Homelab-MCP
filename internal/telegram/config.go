@@ -18,7 +18,7 @@ const (
 	AllowedUsersEnv    = "TELEGRAM_ALLOWED_USER_IDS"
 	AdminUsersEnv      = "TELEGRAM_ADMIN_USER_IDS"
 	AllowedChatsEnv    = "TELEGRAM_ALLOWED_CHAT_IDS"
-	MCPURLEnv          = "HOMELAB_MCP_URL"
+	MCPURLEnv          = "NAUTILUS_URL"
 	ModelEnv           = "TELEGRAM_MODEL"
 	EffortEnv          = "TELEGRAM_EFFORT"
 	ApprovalTimeoutEnv = "TELEGRAM_APPROVAL_TIMEOUT"
@@ -29,8 +29,8 @@ const (
 	DailyBudgetEnv     = "TELEGRAM_DAILY_BUDGET_USD"
 	LedgerPathEnv      = "TELEGRAM_LEDGER_PATH"
 
-	mcpAddrEnv  = "HOMELAB_MCP_HTTP_ADDR"
-	mcpTokenEnv = "HOMELAB_MCP_HTTP_TOKEN"
+	mcpAddrEnv  = "NAUTILUS_HTTP_ADDR"
+	mcpTokenEnv = "NAUTILUS_HTTP_TOKEN"
 
 	anthropicKeyEnv   = "ANTHROPIC_API_KEY"
 	anthropicTokenEnv = "ANTHROPIC_AUTH_TOKEN"
@@ -253,13 +253,13 @@ func stateDir() (string, error) {
 		return dir, nil
 	}
 	if dir := env("XDG_STATE_HOME"); dir != "" {
-		return filepath.Join(dir, "homelab-telegram-bot"), nil
+		return filepath.Join(dir, "nautilus-bot"), nil
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".local", "state", "homelab-telegram-bot"), nil
+	return filepath.Join(home, ".local", "state", "nautilus-bot"), nil
 }
 
 func (c Config) IsAdmin(userID int64) bool { return c.AdminUsers[userID] }

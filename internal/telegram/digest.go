@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	digestTool   = "homelab_daily_digest"
+	digestTool   = "nautilus_daily_digest"
 	digestHours  = 24
 	digestBudget = 3 * time.Minute
 

@@ -27,7 +27,7 @@ func NewMCP(url, token string, elicit ElicitFunc) *MCP {
 	return &MCP{
 		// The server refuses writes to a client that does not declare elicitation.
 		client: sdk.NewClient(
-			&sdk.Implementation{Name: "homelab-telegram-bot", Version: "1.0.0"},
+			&sdk.Implementation{Name: "nautilus-bot", Version: "1.0.0"},
 			&sdk.ClientOptions{ElicitationHandler: elicit},
 		),
 		transport: &sdk.StreamableClientTransport{

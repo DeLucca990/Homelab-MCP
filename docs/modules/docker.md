@@ -71,7 +71,7 @@ Between the model and a container that can be changed:
 
 ### 1. The allowlist — what is reachable at all
 
-`HOMELAB_MCP_ALLOW_CONTAINER_NAMES`, a comma-separated list of container names.
+`NAUTILUS_ALLOW_CONTAINER_NAMES`, a comma-separated list of container names.
 Empty means the action tools are **never registered**, and a model cannot call a
 tool that does not exist.
 

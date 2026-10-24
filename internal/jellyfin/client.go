@@ -22,7 +22,7 @@ const APIKeyEnv = "JELLYFIN_API_KEY"
 const (
 	defaultPort    = "8096"
 	requestTimeout = 10 * time.Second
-	clientName     = "Homelab MCP"
+	clientName     = "Nautilus"
 	clientVersion  = "1.0"
 )
 
@@ -36,7 +36,7 @@ var ErrForbidden = errors.New("jellyfin refused the API key for an admin-only en
 // gone, or a route an older server does not have.
 var ErrNotFound = errors.New("not found")
 
-const ReadOnlyEnv = "HOMELAB_MCP_JELLYFIN_READONLY"
+const ReadOnlyEnv = "NAUTILUS_JELLYFIN_READONLY"
 
 // ReadOnly reports whether the operator asked for monitoring without actions.
 func ReadOnly() bool {
@@ -141,7 +141,7 @@ func (c *client) do(ctx context.Context, method, path string, query url.Values, 
 
 	req.Header.Set("Authorization", fmt.Sprintf(
 		`MediaBrowser Client=%q, Device=%q, DeviceId=%q, Version=%q, Token=%q`,
-		clientName, clientName, "homelab-mcp", clientVersion, c.key))
+		clientName, clientName, "nautilus", clientVersion, c.key))
 	req.Header.Set("Accept", "application/json")
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")

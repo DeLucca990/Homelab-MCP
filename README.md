@@ -25,7 +25,7 @@ for questions in plain words, an Anthropic API key from [platform.claude.com](ht
 
 ```sh
 curl -fsSL -o .env https://raw.githubusercontent.com/DeLucca990/Homelab-MCP/main/.env.example
-chmod 600 .env   # HOMELAB_MCP_HTTP_ADDR, HOMELAB_MCP_HTTP_TOKEN, DOCKER_GID, the API keys, the bot's
+chmod 600 .env   # NAUTILUS_HTTP_ADDR, NAUTILUS_HTTP_TOKEN, DOCKER_GID, the API keys, the bot's
 ```
 
 A `compose.yml` beside it:
@@ -91,11 +91,11 @@ From **Claude Code**, or any client that speaks MCP over HTTP:
 
 ```sh
 claude mcp add --transport http nautilus http://100.101.102.103:3000/mcp \
-  --header "Authorization: Bearer $HOMELAB_MCP_HTTP_TOKEN"
+  --header "Authorization: Bearer $NAUTILUS_HTTP_TOKEN"
 ```
 
 Radarr, Sonarr, Prowlarr, Jellyfin and Bazarr appear only when their key is in the `.env`, and
-container exec and restart only for the containers `HOMELAB_MCP_ALLOW_CONTAINER_NAMES` names.
+container exec and restart only for the containers `NAUTILUS_ALLOW_CONTAINER_NAMES` names.
 Nothing that changes the server — adding a film, restarting a container — runs before you approve
 that exact operation: with **Aprovar** / **Recusar** buttons on Telegram, in the terminal in
 Claude Code.

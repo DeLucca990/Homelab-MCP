@@ -30,7 +30,7 @@ const (
 	callTimeout = 5 * time.Minute
 
 	// Not one of the server's tools: the bot's way into the server's resources.
-	resourceTool = "homelab_resource_read"
+	resourceTool = "nautilus_resource_read"
 )
 
 // The server's procedures, in the order they go into the system prompt. A
@@ -41,7 +41,7 @@ var procedures = []struct{ prompt, when string }{
 	{"why-no-download", "When asked why a film or series has not downloaded"},
 }
 
-const systemPrompt = `You are the operator's assistant for their Linux home server, reached through a Telegram chat. The tools are the server's Homelab MCP: system health, Docker, Radarr, Sonarr, Prowlarr, Jellyfin and Bazarr — only the ones this server has configured.
+const systemPrompt = `You are the operator's assistant for their Linux home server, reached through a Telegram chat. The tools are the server's Nautilus MCP: system health, Docker, Radarr, Sonarr, Prowlarr, Jellyfin and Bazarr — only the ones this server has configured.
 
 The replies are read on a phone. Lead with the answer, keep it short, and go into detail only when asked. Reply in the language the user writes in.
 
@@ -403,7 +403,7 @@ func (a *Agent) tools(ctx context.Context) ([]anthropic.BetaToolUnionParam, map[
 func resourceToolParam(resources []*sdk.Resource) anthropic.BetaToolUnionParam {
 	var b strings.Builder
 	b.WriteString("Reads one of the server's reference documents. Other tools' descriptions name " +
-		"these by their homelab:// URI: read the one named before choosing a quality profile, " +
+		"these by their nautilus:// URI: read the one named before choosing a quality profile, " +
 		"root folder, library, sync profile or language code, instead of guessing and reading " +
 		"the refusal. Changes nothing.\n")
 

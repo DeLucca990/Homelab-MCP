@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	HeartbeatFile     = "/tmp/homelab-telegram-heartbeat"
+	HeartbeatFile     = "/tmp/nautilus-bot-heartbeat"
 	heartbeatInterval = 30 * time.Second
 	heartbeatMaxAge   = 2 * time.Minute
 )

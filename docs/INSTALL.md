@@ -23,8 +23,8 @@ getent group docker | cut -d: -f3   # → DOCKER_GID
 
 | Variable | |
 | --- | --- |
-| `HOMELAB_MCP_HTTP_ADDR` | **required**, as outside Docker: the host's tailscale address and a port, e.g. `100.101.102.103:3000` |
-| `HOMELAB_MCP_HTTP_TOKEN` | **required**: `openssl rand -hex 32` |
+| `NAUTILUS_HTTP_ADDR` | **required**, as outside Docker: the host's tailscale address and a port, e.g. `100.101.102.103:3000` |
+| `NAUTILUS_HTTP_TOKEN` | **required**: `openssl rand -hex 32` |
 | `DOCKER_GID` | **required**: the id of the host's `docker` group, which the server's container joins to reach the socket |
 | `SERVER_URL` and the API keys | the families to register — `http://localhost` reaches the ports the `*arr`s publish |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_USER_IDS` | the bot; without them, run only the server (`docker compose up -d nautilus-mcp`) |
@@ -39,8 +39,8 @@ git clone https://github.com/DeLucca990/Homelab-MCP.git && cd Homelab-MCP
 cp .env.example .env && chmod 600 .env   # then fill it in
 make up                                  # docker compose up -d --build
 make logs-mcp                            # the server; make logs-bot for the bot
-# [homelab-mcp] radarr at http://localhost:7878: read and write
-# [homelab-mcp] MCP server running on transport streamable http at http://100.101.102.103:3000/mcp
+# [nautilus-mcp] radarr at http://localhost:7878: read and write
+# [nautilus-mcp] MCP server running on transport streamable http at http://100.101.102.103:3000/mcp
 ```
 
 To update: `git pull && make up`.
@@ -111,7 +111,7 @@ it runs as an ordinary user. What it can see of the host is what these lines han
 
 | In `compose.yml` | For | Without it |
 | --- | --- | --- |
-| `network_mode: host` | the `.env` meaning what it does outside Docker: `SERVER_URL=http://localhost` reaches the `*arr`s, `HOMELAB_MCP_HTTP_ADDR` binds the tailscale address, and the hostname is the host's | `localhost` is the container; the `*arr`s need the host's address and the server a published port |
+| `network_mode: host` | the `.env` meaning what it does outside Docker: `SERVER_URL=http://localhost` reaches the `*arr`s, `NAUTILUS_HTTP_ADDR` binds the tailscale address, and the hostname is the host's | `localhost` is the container; the `*arr`s need the host's address and the server a published port |
 | `pid: host` | `/proc/1/mountinfo` being the host's mounts, and the process count the host's | the disks listed are the container's own |
 | `/:/host:ro,rslave`, `HOST_ROOT=/host` | each of those mountpoints statted at `/host/<mountpoint>`; `rslave` lets a disk mounted later appear | every disk row is an error |
 | `HOST_ETC=/host/etc` | the OS in `system_host_info` read from the host's `os-release` | it names the image's Debian |
@@ -121,10 +121,10 @@ it runs as an ordinary user. What it can see of the host is what these lines han
 
 The Docker socket is the one that matters: whoever can talk to it is root on the host, in a
 container or out of one. It is why the [action tools](tools/DOCKER.md#turning-them-on) are off
-until `HOMELAB_MCP_ALLOW_CONTAINER_NAMES` names something, and why the bearer token is not
+until `NAUTILUS_ALLOW_CONTAINER_NAMES` names something, and why the bearer token is not
 optional.
 
-The bot is given none of this: the network, to reach the server at `HOMELAB_MCP_HTTP_ADDR`
+The bot is given none of this: the network, to reach the server at `NAUTILUS_HTTP_ADDR`
 whichever interface that is, and a volume.
 
 ## The bot's files
@@ -159,14 +159,22 @@ The units and the containers cannot run side by side: two servers on one address
 bot's files into the volume, and start:
 
 ```sh
-sudo systemctl disable --now homelab-telegram-bot homelab-mcp
+sudo systemctl disable --now nautilus-bot nautilus-mcp
 docker compose create
-docker run --rm -v nautilus-bot-data:/data -v /var/lib/homelab-telegram-bot:/from:ro alpine \
+docker run --rm -v nautilus-bot-data:/data -v /var/lib/nautilus-bot:/from:ro alpine \
   sh -c 'cp -a /from/. /data/ && chown -R 65532:65532 /data'
 docker compose up -d
 ```
 
 The `.env` carries over as it is, plus `DOCKER_GID`.
+
+Installed before the project was called Nautilus, the units are `homelab-mcp` and
+`homelab-telegram-bot`, the bot's files are in `/var/lib/homelab-telegram-bot`, and the `.env`
+names its variables `HOMELAB_MCP_…` where they are now `NAUTILUS_…`:
+
+```sh
+sed -i 's/^HOMELAB_MCP_/NAUTILUS_/' .env
+```
 
 ## When it does not work
 
@@ -175,7 +183,7 @@ The `.env` carries over as it is, plus `DOCKER_GID`.
 | `required variable DOCKER_GID is missing a value` | the `.env` has no `DOCKER_GID` |
 | `cannot access the docker socket … permission denied` | `DOCKER_GID` is not the socket's group: `stat -c %g /var/run/docker.sock` |
 | `listening on …: bind: address already in use` | the systemd unit, or something else, still holds that port |
-| `listening on …: bind: can't assign requested address` | `HOMELAB_MCP_HTTP_ADDR` is not one of this host's addresses — or, right after a reboot, not yet: it retries |
+| `listening on …: bind: can't assign requested address` | `NAUTILUS_HTTP_ADDR` is not one of this host's addresses — or, right after a reboot, not yet: it retries |
 | `path / is mounted on / but it is not a shared or slave mount` | a host whose `/` is not shared (systemd's default is shared): drop `,rslave` |
 | a disk row saying *permission denied* | `user:` cannot reach that mountpoint: make it the owner's `id -u`:`id -g` |
 | `telegram: … 409 Conflict` | another process polls the same bot token — the systemd unit, or another install |
