@@ -5,7 +5,9 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
+	_ "time/tzdata"
 
 	"github.com/DeLucca990/homelab-mcp/internal/dotenv"
 	mcpserver "github.com/DeLucca990/homelab-mcp/internal/mcp"
@@ -17,6 +19,20 @@ func main() {
 
 	dotenv.LoadEnvVariables()
 
+	switch command := strings.Join(os.Args[1:], " "); command {
+	case "":
+		serve()
+	case "healthcheck":
+		if err := mcpserver.Healthy(); err != nil {
+			log.Fatal(err)
+		}
+	default:
+		log.Fatalf("unknown command %q: server serves MCP; server healthcheck says whether "+
+			"a running server is answering", command)
+	}
+}
+
+func serve() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 

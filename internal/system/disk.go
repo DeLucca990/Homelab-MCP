@@ -3,6 +3,8 @@ package system
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -153,7 +155,7 @@ func usageFor(ctx context.Context, p disk.PartitionStat) DiskUsage {
 		ReadOnly:   slices.Contains(p.Opts, "ro"),
 	}
 
-	stat, err := usageWithTimeout(ctx, p.Mountpoint, 2*time.Second)
+	stat, err := usageWithTimeout(ctx, onHost(p.Mountpoint), 2*time.Second)
 	if err != nil {
 		u.Error = err.Error()
 		return u
@@ -168,6 +170,19 @@ func usageFor(ctx context.Context, p disk.PartitionStat) DiskUsage {
 	u.InodesUsedPercent = round2(stat.InodesUsedPercent)
 
 	return u
+}
+
+// onHost is where a mountpoint of the host can be statted from here. In a
+// container sharing the host's pid namespace, /proc/1/mountinfo lists the
+// host's mounts, but by the host's paths: the host's root is mounted at
+// HOST_ROOT — gopsutil's own convention, beside HOST_PROC and HOST_ETC — and
+// each mountpoint is found under it. Unset, this is the host itself.
+func onHost(mountpoint string) string {
+	root := os.Getenv("HOST_ROOT")
+	if root == "" {
+		return mountpoint
+	}
+	return filepath.Join(root, mountpoint)
 }
 
 // disk.Usage performs statfs, which on a network mount (NFS, SMB, SSHFS) whose

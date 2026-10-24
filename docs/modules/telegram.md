@@ -186,6 +186,15 @@ It needs no inbound port. Long polling only opens connections outwards, to
 `api.telegram.org` and `api.anthropic.com`, so it works on a host that is
 reachable only on the tailnet.
 
+### Or in Docker
+
+`compose.yml` runs it beside the server, from the same image and the same
+`.env` ([INSTALL.md](../INSTALL.md)). The image sets `STATE_DIRECTORY=/data`, the
+variable systemd's `StateDirectory=` sets, so the digest's file and the
+ledger land in the `nautilus-bot-data` volume with no other setting.
+Its healthcheck asks Telegram who the bot is every 30 seconds; the MCP server
+being down does not make the bot unhealthy.
+
 ---
 
 ## What it answers

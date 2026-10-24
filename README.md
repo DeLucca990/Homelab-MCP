@@ -70,6 +70,7 @@ Radarr will not tell you:
 - **Linux** for the intended target. It compiles and runs on macOS and Windows too, but the
   filtering heuristics (snap packages, Docker layers) and the CPU breakdown assume a Linux host.
 - **Node.js** only for the MCP Inspector (`make inspect`)
+- Or **Docker** alone, in place of Go — [docs/INSTALL.md](docs/INSTALL.md)
 
 Docker access needs membership in the `docker` group. The read-only system tools need no
 elevation, and the server runs with the privileges of whoever launches it — normally the
@@ -107,7 +108,8 @@ bot, for its own variables) after changing any of them.
 | `HOMELAB_MCP_JELLYFIN_READONLY` | drops Jellyfin's seven writes | [docs/tools/JELLYFIN.md](docs/tools/JELLYFIN.md#configuration) |
 | `SERVER_URL` + `BAZARR_API_KEY` | the whole Bazarr family | [docs/tools/BAZARR.md](docs/tools/BAZARR.md#configuration) |
 | `HOMELAB_MCP_BAZARR_READONLY` | drops Bazarr's five writes | [docs/tools/BAZARR.md](docs/tools/BAZARR.md#configuration) |
-| `HOMELAB_MCP_HTTP_ADDR` + `HOMELAB_MCP_HTTP_TOKEN` | **required** — the address it listens on and the token it demands | [below](#over-http-instead) |
+| `HOMELAB_MCP_HTTP_ADDR` + `HOMELAB_MCP_HTTP_TOKEN` | **required** — the address it listens on and the token it demands | [below](#running-it) |
+| `DOCKER_GID` | **required in Docker** — the host's `docker` group, which the server's container joins to reach the socket | [docs/INSTALL.md](docs/INSTALL.md#the-env) |
 | `TELEGRAM_BOT_TOKEN` + `TELEGRAM_ALLOWED_USER_IDS` | the Telegram bot, a separate binary — read by it, not by the server | [docs/modules/telegram.md](docs/modules/telegram.md#2-the-env) |
 | `TELEGRAM_ADMIN_USER_IDS` | the bot's users who may also remove, stop, restart and reconfigure — the rest read and add | [docs/modules/telegram.md](docs/modules/telegram.md#admins) |
 | `TELEGRAM_DAILY_BUDGET_USD` | the most a day of the bot's natural language may cost before it pauses until midnight | [docs/modules/telegram.md](docs/modules/telegram.md#spending-cost-and-the-daily-budget) |
@@ -264,6 +266,22 @@ this host.
 
 It shuts down cleanly on `Ctrl+C` (SIGINT) and on SIGTERM, so it behaves under systemd.
 
+### In Docker
+
+One image holds the server and the bot, and `compose.yml` runs it twice — once as each — from the
+same `.env`, plus `DOCKER_GID`:
+
+```sh
+cp .env.example .env && chmod 600 .env   # or the .env you already have
+make up                                  # docker compose up -d --build
+make logs-mcp                            # make logs-bot for the bot
+```
+
+The server's container is given the host — its network and processes, its filesystems read-only,
+the Docker socket and the system bus — so every tool answers about the machine, not the
+container, and the `.env` reads as it does outside Docker. What each mount is for, the image on
+Docker Hub and moving from the units below: [docs/INSTALL.md](docs/INSTALL.md).
+
 ### Under systemd
 
 Nothing execs this binary, so something has to keep it alive across logout and reboot. Run it
@@ -382,6 +400,7 @@ docs/ARCHITECTURE.md   the shape both of those sit in
 | [docs/tools/PROMPTS.md](docs/tools/PROMPTS.md) · [docs/tools/RESOURCES.md](docs/tools/RESOURCES.md) | the two surfaces that are not tools |
 | [docs/tools/SYSTEM.md](docs/tools/SYSTEM.md) · [docs/tools/DOCKER.md](docs/tools/DOCKER.md) · [docs/tools/RADARR.md](docs/tools/RADARR.md) · [docs/tools/SONARR.md](docs/tools/SONARR.md) · [docs/tools/JELLYFIN.md](docs/tools/JELLYFIN.md) · [docs/tools/BAZARR.md](docs/tools/BAZARR.md) · [docs/tools/PROWLARR.md](docs/tools/PROWLARR.md) | per-family reference |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | layering, tool registration, the confirmation round trip, the fingerprint |
+| [docs/INSTALL.md](docs/INSTALL.md) | running both in Docker: the image, what the server's container is given and why, health |
 | [docs/modules/](docs/modules/) | one page per integration: [system](docs/modules/system.md), [docker](docs/modules/docker.md), [radarr](docs/modules/radarr.md), [sonarr](docs/modules/sonarr.md), [jellyfin](docs/modules/jellyfin.md), [bazarr](docs/modules/bazarr.md), [prowlarr](docs/modules/prowlarr.md), [telegram](docs/modules/telegram.md) |
 
 ## Project layout

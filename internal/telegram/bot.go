@@ -103,6 +103,7 @@ func (b *Bot) Run(ctx context.Context) {
 		go b.runDigests(ctx)
 	}
 
+	go b.heartbeat(ctx)
 	b.tg.Start(ctx)
 }
 
