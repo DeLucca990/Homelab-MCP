@@ -333,6 +333,12 @@ func run(ctx context.Context, args ...string) (string, error) {
 			return "", fmt.Errorf("systemctl %s timed out after %s (systemd unresponsive?)",
 				args[0], systemctlTimeout)
 		}
+		// The binary without the system: a container that was not given the
+		// host's systemd, which is the same answer as no systemctl at all.
+		if strings.Contains(stderr.String(), "not been booted with systemd") {
+			return "", fmt.Errorf("%w: in a container, mount the host's /run/systemd/system "+
+				"and /run/dbus", ErrUnavailable)
+		}
 		// systemctl exits non-zero merely because a queried unit is failed or
 		// missing, while still writing good output. Usable stdout outranks it.
 		if stdout.Len() > 0 {

@@ -49,7 +49,7 @@ in the same way the tools are:
 A read-only sweep of the machine, worst first. Given a symptom it works out
 whether the server explains it, rather than only listing what is broken.
 
-The procedure starts at `homelab_overview` and goes down only into the areas
+The procedure starts at `nautilus_overview` and goes down only into the areas
 that flag, carrying the reading that each area needs and that its numbers do not
 state on their own:
 
@@ -122,7 +122,7 @@ indexers are failing, `prowlarr_search` for whether any release exists at all,
 and `prowlarr_applications` for an indexer that works in Prowlarr and never
 reached the *arr. Where Jellyfin is, the same step covers the download that
 arrived and still cannot be watched: `jellyfin_find_item` for whether Jellyfin
-has it, and `homelab://jellyfin/libraries` for whether it landed in a folder
+has it, and `nautilus://jellyfin/libraries` for whether it landed in a folder
 Jellyfin reads.
 
 It closes by asking for the diagnosis before the fix. Every tool that would act

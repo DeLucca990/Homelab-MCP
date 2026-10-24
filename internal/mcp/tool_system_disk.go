@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/DeLucca990/homelab-mcp/internal/system"
+	"github.com/DeLucca990/nautilus/internal/system"
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )

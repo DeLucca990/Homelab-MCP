@@ -23,7 +23,7 @@ Design notes: [docs/modules/prowlarr.md](../modules/prowlarr.md).
 | --- | --- |
 | `SERVER_URL` | the server the services run on: `http://localhost` when this binary runs on that same machine, otherwise `http://10.0.0.4` or `https://media.example.com/prowlarr` |
 | `PROWLARR_API_KEY` | Prowlarr → Settings → General → Security → API Key |
-| `HOMELAB_MCP_PROWLARR_READONLY` | set to `1` to drop the four writes, leaving the six reads |
+| `NAUTILUS_PROWLARR_READONLY` | set to `1` to drop the four writes, leaving the six reads |
 
 Without the first two, **none of these tools are registered**. `SERVER_URL` is
 the same variable the other services read, and each fills in its own port —

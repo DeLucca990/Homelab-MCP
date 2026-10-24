@@ -8,7 +8,7 @@ import (
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/DeLucca990/homelab-mcp/internal/prowlarr"
+	"github.com/DeLucca990/nautilus/internal/prowlarr"
 )
 
 // PROWLARR HEALTH TOOL

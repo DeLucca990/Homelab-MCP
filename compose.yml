@@ -1,0 +1,45 @@
+services:
+  nautilus-mcp:
+    build: .
+    image: pedrodl/nautilus:latest
+    container_name: nautilus-mcp
+    env_file: .env
+    network_mode: host
+    pid: host
+    user: "1000:1000"
+    group_add:
+      - "${DOCKER_GID:?set DOCKER_GID in .env to the docker group id: getent group docker | cut -d: -f3}"
+    environment:
+      - HOST_ROOT=/host
+      - HOST_ETC=/host/etc
+    volumes:
+      - /:/host:ro,rslave
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /run/dbus:/run/dbus:ro
+      - /run/systemd/system:/run/systemd/system:ro
+    read_only: true
+    tmpfs:
+      - /tmp
+    restart: unless-stopped
+
+  nautilus-bot:
+    build: .
+    image: pedrodl/nautilus:latest
+    container_name: nautilus-bot
+    command: ["/telegram-bot"]
+    healthcheck:
+      test: ["CMD", "/telegram-bot", "healthcheck"]
+      start_period: 1m
+    env_file: .env
+    network_mode: host
+    volumes:
+      - nautilus-bot-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    depends_on: [nautilus-mcp]
+    restart: unless-stopped
+
+volumes:
+  nautilus-bot-data:
+    name: nautilus-bot-data

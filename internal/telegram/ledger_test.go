@@ -185,11 +185,11 @@ func TestDigestHeadlineRespectsTheBudget(t *testing.T) {
 
 func TestConfigBudgetAndLedger(t *testing.T) {
 	base := map[string]string{TokenEnv: "x", AllowedUsersEnv: "42", MCPURLEnv: "http://x/mcp", mcpTokenEnv: "t",
-		"STATE_DIRECTORY": "/var/lib/homelab-telegram-bot"}
+		"STATE_DIRECTORY": "/var/lib/nautilus-bot"}
 
 	setEnv(t, base)
 	cfg, err := LoadConfig()
-	if err != nil || cfg.DailyBudget != 0 || cfg.LedgerPath != "/var/lib/homelab-telegram-bot/spend.jsonl" {
+	if err != nil || cfg.DailyBudget != 0 || cfg.LedgerPath != "/var/lib/nautilus-bot/spend.jsonl" {
 		t.Fatalf("defaults: budget %v, ledger %q, %v", cfg.DailyBudget, cfg.LedgerPath, err)
 	}
 

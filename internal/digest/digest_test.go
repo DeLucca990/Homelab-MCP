@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DeLucca990/homelab-mcp/internal/containers"
-	"github.com/DeLucca990/homelab-mcp/internal/jellyfin"
+	"github.com/DeLucca990/nautilus/internal/containers"
+	"github.com/DeLucca990/nautilus/internal/jellyfin"
 )
 
 func TestContainerEvents(t *testing.T) {

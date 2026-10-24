@@ -28,12 +28,12 @@ Design notes: [docs/modules/radarr.md](../modules/radarr.md).
 | --- | --- |
 | `SERVER_URL` | the server the services run on: `http://localhost` when this binary runs on that same machine, otherwise `http://10.0.0.4` or `https://media.example.com/radarr` |
 | `RADARR_API_KEY` | Radarr → Settings → General → Security → API Key |
-| `HOMELAB_MCP_RADARR_READONLY` | set to `1` to drop the seven writes, leaving monitoring only |
+| `NAUTILUS_RADARR_READONLY` | set to `1` to drop the seven writes, leaving monitoring only |
 
 Without the first two, **none of these tools are registered** — a server with no
 Radarr configured cannot be asked to reach one. Both belong on the server side,
 in the environment of the process that runs the binary; the
-[README](../../README.md#configuration) covers how to get them there.
+[DETAILS](../DETAILS.md#configuration) covers how to get them there.
 
 `SERVER_URL` is not named for Radarr on purpose: it says *where the home server
 is*, and each integration resolves its own service against it — this one by

@@ -6,8 +6,8 @@ they are built the way they are, see [`docs/modules/`](../modules/) and
 
 | Family | Tools | Page |
 | --- | --- | --- |
-| Overview | 1, read-only, spans every family | [below](#homelab_overview) |
-| Digest | 1, read-only, spans every family over a window of time | [below](#homelab_daily_digest) |
+| Overview | 1, read-only, spans every family | [below](#nautilus_overview) |
+| Digest | 1, read-only, spans every family over a window of time | [below](#nautilus_daily_digest) |
 | System | 5, all read-only | [SYSTEM.md](SYSTEM.md) |
 | Docker | 4 — 2 read-only, 2 opt-in actions | [DOCKER.md](DOCKER.md) |
 | Radarr | 15 — 8 read-only, 7 writes | [RADARR.md](RADARR.md) |
@@ -33,7 +33,7 @@ next to this one:
 
 ---
 
-## `homelab_overview`
+## `nautilus_overview`
 
 No parameters. The answer to *"is anything wrong?"*, which is the question
 people actually ask and the only one that spans every family.
@@ -93,7 +93,7 @@ nothing needs attention (6 checks in 61ms)
   usually turns out to be. `system_cpu_cores` is one call away when the question
   is about the cores themselves.
 
-## `homelab_daily_digest`
+## `nautilus_daily_digest`
 
 | Parameter | Type | Default | |
 | --- | --- | --- | --- |
@@ -135,7 +135,7 @@ writable filesystems:
 ```
 
 - **Attention is the overview's.** The first block is exactly what
-  `homelab_overview` would say now, so the two never disagree.
+  `nautilus_overview` would say now, so the two never disagree.
 - **Late, not merely missing.** A monitored release counts once it has been
   out six hours without a file — an episode that aired an hour ago is the
   normal case. Releases in cinemas are left out: nobody can download those.

@@ -19,7 +19,7 @@ const BaseURLEnv = "SERVER_URL"
 
 const APIKeyEnv = "PROWLARR_API_KEY"
 
-const ReadOnlyEnv = "HOMELAB_MCP_PROWLARR_READONLY"
+const ReadOnlyEnv = "NAUTILUS_PROWLARR_READONLY"
 
 const (
 	defaultPort = "9696"

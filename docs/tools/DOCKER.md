@@ -91,15 +91,15 @@ approval to the exact operation. The full reasoning is in
 
 ### Turning them on
 
-`HOMELAB_MCP_ALLOW_CONTAINER_NAMES` is a comma-separated list of container names
+`NAUTILUS_ALLOW_CONTAINER_NAMES` is a comma-separated list of container names
 — the `NAMES` column of `docker ps`, not the image and not the id:
 
 ```json
 {
   "mcpServers": {
-    "homelab": {
+    "nautilus": {
       "command": "/absolute/path/to/Homelab-MCP/bin/server",
-      "env": { "HOMELAB_MCP_ALLOW_CONTAINER_NAMES": "jellyfin,sonarr" }
+      "env": { "NAUTILUS_ALLOW_CONTAINER_NAMES": "jellyfin,sonarr" }
     }
   }
 }
@@ -116,7 +116,7 @@ restart your MCP client after changing it.
 > ⚠️ **Running over SSH? The `env` block above does not reach the server.** It
 > sets variables for the local `ssh` process, and SSH does not forward arbitrary
 > variables. Put them in the remote command instead, or use a `.env` on the
-> remote machine — see the [README](../../README.md#configuration).
+> remote machine — see the [DETAILS](../DETAILS.md#configuration).
 
 ### `docker_container_exec`
 

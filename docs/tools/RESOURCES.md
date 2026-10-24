@@ -6,18 +6,18 @@ question rather than a reading.
 
 | URI | Holds | Registered |
 | --- | --- | --- |
-| `homelab://server/configuration` | what this install registered, and the variable that would enable what it did not | always |
-| `homelab://radarr/quality-profiles` | the profile names `radarr_movie_add` accepts | with Radarr |
-| `homelab://radarr/root-folders` | where it can put a film, and the free space on each | with Radarr |
-| `homelab://sonarr/quality-profiles` | the profile names `sonarr_series_add` accepts | with Sonarr |
-| `homelab://sonarr/root-folders` | where it can put a show, and the free space on each | with Sonarr |
-| `homelab://jellyfin/libraries` | the library names the Jellyfin writes take, with the folders each reads | with Jellyfin |
-| `homelab://prowlarr/sync-profiles` | the sync profiles and tags the Prowlarr writes accept, and which app each tag routes indexers to | with Prowlarr |
-| `homelab://bazarr/language-profiles` | the profiles `bazarr_language_profile_set` accepts, with their languages, and the language codes the subtitle tools take | with Bazarr |
+| `nautilus://server/configuration` | what this install registered, and the variable that would enable what it did not | always |
+| `nautilus://radarr/quality-profiles` | the profile names `radarr_movie_add` accepts | with Radarr |
+| `nautilus://radarr/root-folders` | where it can put a film, and the free space on each | with Radarr |
+| `nautilus://sonarr/quality-profiles` | the profile names `sonarr_series_add` accepts | with Sonarr |
+| `nautilus://sonarr/root-folders` | where it can put a show, and the free space on each | with Sonarr |
+| `nautilus://jellyfin/libraries` | the library names the Jellyfin writes take, with the folders each reads | with Jellyfin |
+| `nautilus://prowlarr/sync-profiles` | the sync profiles and tags the Prowlarr writes accept, and which app each tag routes indexers to | with Prowlarr |
+| `nautilus://bazarr/language-profiles` | the profiles `bazarr_language_profile_set` accepts, with their languages, and the language codes the subtitle tools take | with Bazarr |
 
 A client reads them with `resources/read`; most also let you attach one to a
 conversation directly. The Telegram bot reads them through a tool of its own,
-`homelab_resource_read` ([details](../modules/telegram.md#plain-words)).
+`nautilus_resource_read` ([details](../modules/telegram.md#plain-words)).
 
 ## Why these are not tools
 
@@ -35,7 +35,7 @@ cannot tell a missing feature from a missing variable.
 
 ---
 
-## `homelab://server/configuration`
+## `nautilus://server/configuration`
 
 Every family, whether it is registered, and — where it is not — the environment
 variable that would register it. It also states the Docker allowlist verbatim,
@@ -48,7 +48,7 @@ which is the list of containers the action tools may ever touch.
 need access to the docker socket to answer.
 
 `docker_container_exec` and `docker_container_restart` are **not** registered:
-`HOMELAB_MCP_ALLOW_CONTAINER_NAMES` is unset. It takes a comma-separated list of
+`NAUTILUS_ALLOW_CONTAINER_NAMES` is unset. It takes a comma-separated list of
 container names, and those are the only ones those tools will ever reach.
 
 ## Radarr
@@ -63,7 +63,7 @@ they are LAN addresses, and the server already logs them at startup.
 
 ---
 
-## `homelab://radarr/quality-profiles`, `homelab://sonarr/quality-profiles`
+## `nautilus://radarr/quality-profiles`, `nautilus://sonarr/quality-profiles`
 
 ```markdown
 # Radarr quality profiles
@@ -86,7 +86,7 @@ before it happened.
 
 ---
 
-## `homelab://radarr/root-folders`, `homelab://sonarr/root-folders`
+## `nautilus://radarr/root-folders`, `nautilus://sonarr/root-folders`
 
 ```markdown
 # Sonarr root folders
@@ -114,7 +114,7 @@ Two things this states that the add tool's refusal would not:
 
 ---
 
-## `homelab://bazarr/language-profiles`
+## `nautilus://bazarr/language-profiles`
 
 ```markdown
 # Bazarr language profiles
@@ -142,7 +142,7 @@ guessable:
 
 ---
 
-## `homelab://prowlarr/sync-profiles`
+## `nautilus://prowlarr/sync-profiles`
 
 ```markdown
 ## Tags
@@ -159,7 +159,7 @@ with the wrong one reaches nobody.
 
 ---
 
-## `homelab://jellyfin/libraries`
+## `nautilus://jellyfin/libraries`
 
 ```markdown
 | Name | Type | Folders | Scanning |

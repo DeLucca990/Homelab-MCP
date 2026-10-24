@@ -7,13 +7,13 @@ import (
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/DeLucca990/homelab-mcp/internal/jellyfin"
+	"github.com/DeLucca990/nautilus/internal/jellyfin"
 )
 
 // JELLYFIN SESSIONS TOOL
 //
 // What the server is serving right now, and what each stream costs it. This is
-// the reading homelab_overview leaves out on purpose: a pinned core on a media
+// the reading nautilus_overview leaves out on purpose: a pinned core on a media
 // server is either a transcode or a fault, and nothing else here can say which.
 // Read-only.
 

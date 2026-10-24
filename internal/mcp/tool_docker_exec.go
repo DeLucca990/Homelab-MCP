@@ -8,14 +8,14 @@ import (
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/DeLucca990/homelab-mcp/internal/containers"
+	"github.com/DeLucca990/nautilus/internal/containers"
 )
 
 // DOCKER EXEC TOOL
 //
 // Three independent layers stand between the model and the container:
 //
-//  1. Allowlist — HOMELAB_MCP_ALLOW_CONTAINER_NAMES, which nothing the model or
+//  1. Allowlist — NAUTILUS_ALLOW_CONTAINER_NAMES, which nothing the model or
 //     the client does can widen. Empty means the tool is never registered.
 //  2. Human confirmation — every execution is approved first, by the server
 //     through the protocol where the client supports it and by the client's own

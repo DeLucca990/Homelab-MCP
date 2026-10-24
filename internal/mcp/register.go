@@ -6,20 +6,20 @@ import (
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/DeLucca990/homelab-mcp/internal/bazarr"
-	"github.com/DeLucca990/homelab-mcp/internal/containers"
-	"github.com/DeLucca990/homelab-mcp/internal/jellyfin"
-	"github.com/DeLucca990/homelab-mcp/internal/prowlarr"
-	"github.com/DeLucca990/homelab-mcp/internal/radarr"
-	"github.com/DeLucca990/homelab-mcp/internal/sonarr"
+	"github.com/DeLucca990/nautilus/internal/bazarr"
+	"github.com/DeLucca990/nautilus/internal/containers"
+	"github.com/DeLucca990/nautilus/internal/jellyfin"
+	"github.com/DeLucca990/nautilus/internal/prowlarr"
+	"github.com/DeLucca990/nautilus/internal/radarr"
+	"github.com/DeLucca990/nautilus/internal/sonarr"
 )
 
 func registerTools(s *sdk.Server) {
 	// overview tool
 	sdk.AddTool(s, &sdk.Tool{
-		Name: "homelab_overview",
+		Name: "nautilus_overview",
 		Annotations: &sdk.ToolAnnotations{
-			Title:        "Homelab Overview",
+			Title:        "Nautilus Overview",
 			ReadOnlyHint: true,
 		},
 		Description: "Answers 'is anything wrong with this server' in ONE call. Runs every " +
@@ -40,13 +40,13 @@ func registerTools(s *sdk.Server) {
 
 	// digest tool
 	sdk.AddTool(s, &sdk.Tool{
-		Name: "homelab_daily_digest",
+		Name: "nautilus_daily_digest",
 		Annotations: &sdk.ToolAnnotations{
-			Title:        "Homelab Daily Digest",
+			Title:        "Nautilus Daily Digest",
 			ReadOnlyHint: true,
 		},
 		Description: "Answers 'what happened on this server lately' in ONE call — the counterpart " +
-			"of homelab_overview over a window of time (default the last 24 hours) instead of " +
+			"of nautilus_overview over a window of time (default the last 24 hours) instead of " +
 			"an instant. Reports what needs attention now (the overview's own warnings), whether " +
 			"the host rebooted, which containers restarted, were recreated or stopped, what " +
 			"Radarr and Sonarr imported and what failed with the reason, which monitored releases " +
@@ -57,7 +57,7 @@ func registerTools(s *sdk.Server) {
 			"failing indexers, container restart counts. It keeps no state: it cannot say what " +
 			"changed since an earlier call, only what the services timestamped within the window. " +
 			"Use it for 'how was the night', 'what arrived today' or a daily report; use " +
-			"homelab_overview for 'is anything wrong right now'.",
+			"nautilus_overview for 'is anything wrong right now'.",
 	}, handleDigest)
 
 	// system host tool
@@ -766,7 +766,7 @@ func registerJellyfinTools(s *sdk.Server) {
 		},
 		Description: "Returns who is watching what on Jellyfin right now and what each stream " +
 			"costs the server, most expensive first. This is the tool that answers 'why is the " +
-			"CPU at 100%' on a media server, which homelab_overview deliberately will not guess " +
+			"CPU at 100%' on a media server, which nautilus_overview deliberately will not guess " +
 			"at: a pinned core is either a transcode or a fault, and only this can tell them " +
 			"apart. It goes finer than Jellyfin's own label — 'Transcode' covers both a remux " +
 			"that costs nothing and a full re-encode that saturates a core, so the 'work' field " +
@@ -1094,7 +1094,7 @@ func registerBazarrTools(s *sdk.Server) {
 			"profile — the setting that decides which subtitles Bazarr keeps searching for and " +
 			"upgrading. This is how 'from now on I want Portuguese and English subtitles for this' " +
 			"becomes permanent, where bazarr_subtitle_search only fetches something once. The " +
-			"profiles, with their languages, are at homelab://bazarr/language-profiles; 'none' stops " +
+			"profiles, with their languages, are at nautilus://bazarr/language-profiles; 'none' stops " +
 			"Bazarr wanting anything. Downloads and deletes nothing, and does not start a search. " +
 			"Asks the user first.",
 	}, handleBazarrProfile)

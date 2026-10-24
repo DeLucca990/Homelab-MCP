@@ -7,7 +7,7 @@ import (
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/DeLucca990/homelab-mcp/internal/radarr"
+	"github.com/DeLucca990/nautilus/internal/radarr"
 )
 
 // RADARR ADD TOOL

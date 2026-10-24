@@ -15,7 +15,7 @@ Gated on two variables, the same shape as the two `*arr` families:
 
 ```go
 if jellyfin.Configured() { ... }   // SERVER_URL and JELLYFIN_API_KEY both set
-if jellyfin.ReadOnly() { return }  // HOMELAB_MCP_JELLYFIN_READONLY: stops before the seven writes
+if jellyfin.ReadOnly() { return }  // NAUTILUS_JELLYFIN_READONLY: stops before the seven writes
 ```
 
 The read-only switch arrived with the first write, as this page used to promise
@@ -49,8 +49,8 @@ request that happens to carry a header. Jellyfin wants its own scheme, with
 named values:
 
 ```
-Authorization: MediaBrowser Client="Homelab MCP", Device="Homelab MCP",
-               DeviceId="homelab-mcp", Version="1.0", Token="<key>"
+Authorization: MediaBrowser Client="Nautilus", Device="Nautilus",
+               DeviceId="nautilus", Version="1.0", Token="<key>"
 ```
 
 Only `Token` is strictly required, but the client fields are sent because
@@ -88,7 +88,7 @@ fixable state; four missing tables are not.
 
 ## Sessions: what a stream costs is not what Jellyfin calls it
 
-`homelab_overview` deliberately reports no CPU, because a media server
+`nautilus_overview` deliberately reports no CPU, because a media server
 transcoding looks exactly like one in trouble. This module exists to close that
 gap, and doing so needs one distinction Jellyfin's own vocabulary does not make.
 
@@ -179,7 +179,7 @@ what is wrong with it now — today, the two encoding findings. They are repeate
 there rather than held out, so the health tool reports everything and neither
 output channel is short a fact.
 
-The distinction exists for `homelab_overview`, which asks a different question:
+The distinction exists for `nautilus_overview`, which asks a different question:
 *is anything wrong right now*. A machine with no GPU has no hardware
 acceleration every second of its life, and an overview that opens with that on
 every glance is one nobody reads twice — so the jellyfin section drops them and
@@ -220,7 +220,7 @@ hours in the future and reports an age of zero, which renders as "never".
 
 ## In the overview
 
-`homelab_overview` gets a `jellyfin` section wherever the module is configured,
+`nautilus_overview` gets a `jellyfin` section wherever the module is configured,
 composed from both collectors — six requests, in parallel with every other
 check, so it costs the slowest of them rather than their sum.
 

@@ -7,8 +7,8 @@ import (
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/DeLucca990/homelab-mcp/internal/digest"
-	"github.com/DeLucca990/homelab-mcp/internal/system"
+	"github.com/DeLucca990/nautilus/internal/digest"
+	"github.com/DeLucca990/nautilus/internal/system"
 )
 
 // DIGEST TOOL

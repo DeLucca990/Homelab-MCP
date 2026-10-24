@@ -212,7 +212,7 @@ in place, exactly as a tool's text channel does it.
 
 ### The overview composes; it does not duplicate
 
-`homelab_overview` runs every cheap check at once and reports only what needs
+`nautilus_overview` runs every cheap check at once and reports only what needs
 attention. It lives in `internal/overview/`, which imports the other collectors
 and imports nothing from `internal/mcp` — the same rule as every other collector,
 applied to a collector whose sources are collectors.
@@ -247,7 +247,7 @@ Two distinctions it holds that a simple aggregate would lose:
 
 ### The digest is the overview over time, and remembers nothing
 
-`homelab_daily_digest` (`internal/digest/`) answers what happened over a window —
+`nautilus_daily_digest` (`internal/digest/`) answers what happened over a window —
 by default the last day — the way the overview answers what is wrong now, and
 under the same rule: it imports collectors and nothing from `internal/mcp`, and
 what needs attention in it is the overview's own warnings, taken unchanged.

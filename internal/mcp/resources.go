@@ -8,13 +8,13 @@ import (
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/DeLucca990/homelab-mcp/internal/bazarr"
-	"github.com/DeLucca990/homelab-mcp/internal/containers"
-	"github.com/DeLucca990/homelab-mcp/internal/jellyfin"
-	"github.com/DeLucca990/homelab-mcp/internal/prowlarr"
-	"github.com/DeLucca990/homelab-mcp/internal/radarr"
-	"github.com/DeLucca990/homelab-mcp/internal/sonarr"
-	"github.com/DeLucca990/homelab-mcp/internal/system"
+	"github.com/DeLucca990/nautilus/internal/bazarr"
+	"github.com/DeLucca990/nautilus/internal/containers"
+	"github.com/DeLucca990/nautilus/internal/jellyfin"
+	"github.com/DeLucca990/nautilus/internal/prowlarr"
+	"github.com/DeLucca990/nautilus/internal/radarr"
+	"github.com/DeLucca990/nautilus/internal/sonarr"
+	"github.com/DeLucca990/nautilus/internal/system"
 )
 
 // Resources are the reference data — small, stable, and the answer to a
@@ -29,14 +29,14 @@ import (
 // assistant can only say "I have no way to do that" without ever knowing why.
 
 const (
-	resourceConfiguration     = "homelab://server/configuration"
-	resourceRadarrProfiles    = "homelab://radarr/quality-profiles"
-	resourceRadarrFolders     = "homelab://radarr/root-folders"
-	resourceSonarrProfiles    = "homelab://sonarr/quality-profiles"
-	resourceSonarrFolders     = "homelab://sonarr/root-folders"
-	resourceBazarrProfiles    = "homelab://bazarr/language-profiles"
-	resourceProwlarrSync      = "homelab://prowlarr/sync-profiles"
-	resourceJellyfinLibraries = "homelab://jellyfin/libraries"
+	resourceConfiguration     = "nautilus://server/configuration"
+	resourceRadarrProfiles    = "nautilus://radarr/quality-profiles"
+	resourceRadarrFolders     = "nautilus://radarr/root-folders"
+	resourceSonarrProfiles    = "nautilus://sonarr/quality-profiles"
+	resourceSonarrFolders     = "nautilus://sonarr/root-folders"
+	resourceBazarrProfiles    = "nautilus://bazarr/language-profiles"
+	resourceProwlarrSync      = "nautilus://prowlarr/sync-profiles"
+	resourceJellyfinLibraries = "nautilus://jellyfin/libraries"
 )
 
 func registerResources(s *sdk.Server) {
@@ -141,9 +141,9 @@ func handleConfigurationResource(ctx context.Context, req *sdk.ReadResourceReque
 		"A tool that is not listed here was never created, so it cannot be called. " +
 		"Each line says what would enable it.\n\n")
 
-	b.WriteString("## Overview\n\n`homelab_overview` is always registered and covers every " +
+	b.WriteString("## Overview\n\n`nautilus_overview` is always registered and covers every " +
 		"area below in one call. It is the one to reach for first.\n\n" +
-		"`homelab_daily_digest` is always registered too: the same areas over the last day " +
+		"`nautilus_daily_digest` is always registered too: the same areas over the last day " +
 		"instead of right now — what arrived, what failed, what is late, what restarted.\n\n")
 
 	b.WriteString("## System (5 tools)\n\nAlways registered, all read-only: host info, CPU, " +

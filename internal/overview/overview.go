@@ -8,14 +8,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/DeLucca990/homelab-mcp/internal/bazarr"
-	"github.com/DeLucca990/homelab-mcp/internal/containers"
-	"github.com/DeLucca990/homelab-mcp/internal/jellyfin"
-	"github.com/DeLucca990/homelab-mcp/internal/prowlarr"
-	"github.com/DeLucca990/homelab-mcp/internal/radarr"
-	"github.com/DeLucca990/homelab-mcp/internal/services"
-	"github.com/DeLucca990/homelab-mcp/internal/sonarr"
-	"github.com/DeLucca990/homelab-mcp/internal/system"
+	"github.com/DeLucca990/nautilus/internal/bazarr"
+	"github.com/DeLucca990/nautilus/internal/containers"
+	"github.com/DeLucca990/nautilus/internal/jellyfin"
+	"github.com/DeLucca990/nautilus/internal/prowlarr"
+	"github.com/DeLucca990/nautilus/internal/radarr"
+	"github.com/DeLucca990/nautilus/internal/services"
+	"github.com/DeLucca990/nautilus/internal/sonarr"
+	"github.com/DeLucca990/nautilus/internal/system"
 )
 
 // One answer to "is anything wrong with this server", assembled from the checks

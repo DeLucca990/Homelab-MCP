@@ -8,7 +8,7 @@ import (
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/DeLucca990/homelab-mcp/internal/jellyfin"
+	"github.com/DeLucca990/nautilus/internal/jellyfin"
 )
 
 // JELLYFIN WRITE TOOLS
@@ -20,7 +20,7 @@ import (
 // --- library scan --------------------------------------------------------------------
 
 type jellyfinScanInput struct {
-	Library string `json:"library,omitempty" jsonschema:"one library, by name — homelab://jellyfin/libraries lists them"`
+	Library string `json:"library,omitempty" jsonschema:"one library, by name — nautilus://jellyfin/libraries lists them"`
 	ItemID  string `json:"item_id,omitempty" jsonschema:"one item, from jellyfin_find_item — refreshes just that film or series"`
 }
 

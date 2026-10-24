@@ -8,7 +8,7 @@ import (
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/DeLucca990/homelab-mcp/internal/bazarr"
+	"github.com/DeLucca990/nautilus/internal/bazarr"
 )
 
 // BAZARR LANGUAGE PROFILE TOOL
@@ -23,7 +23,7 @@ type bazarrProfileInput struct {
 	RadarrID int `json:"radarr_id,omitempty" jsonschema:"a movie, by Radarr's own id"`
 	SeriesID int `json:"series_id,omitempty" jsonschema:"a whole series, by Sonarr's own id — the profile applies to every episode"`
 
-	Profile string `json:"profile" jsonschema:"the language profile, by name or id — homelab://bazarr/language-profiles lists them with their languages. 'none' stops Bazarr wanting any subtitle for this"`
+	Profile string `json:"profile" jsonschema:"the language profile, by name or id — nautilus://bazarr/language-profiles lists them with their languages. 'none' stops Bazarr wanting any subtitle for this"`
 }
 
 func handleBazarrProfile(

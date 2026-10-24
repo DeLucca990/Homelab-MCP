@@ -155,7 +155,7 @@ func PlanMessage(ctx context.Context, sessionID, text string) (MessagePlan, erro
 		return MessagePlan{}, fmt.Errorf("%s does not accept remote control, so it cannot show a "+
 			"message", s.who())
 	}
-	return MessagePlan{Session: s, Header: "Homelab", Text: text}, nil
+	return MessagePlan{Session: s, Header: "Nautilus", Text: text}, nil
 }
 
 // SendMessage shows a planned message on the session's screen.
@@ -169,7 +169,7 @@ func SendMessage(ctx context.Context, p MessagePlan) error {
 
 func (c *client) sendMessage(ctx context.Context, sessionID, text string) error {
 	return c.send(ctx, http.MethodPost, "/Sessions/"+url.PathEscape(sessionID)+"/Message", nil,
-		map[string]any{"Header": "Homelab", "Text": text, "TimeoutMs": messageTimeoutMs})
+		map[string]any{"Header": "Nautilus", "Text": text, "TimeoutMs": messageTimeoutMs})
 }
 
 // session finds one session by id among the recently active ones.

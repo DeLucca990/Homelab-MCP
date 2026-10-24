@@ -7,7 +7,7 @@ import (
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/DeLucca990/homelab-mcp/internal/overview"
+	"github.com/DeLucca990/nautilus/internal/overview"
 )
 
 // OVERVIEW TOOL

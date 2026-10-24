@@ -7,7 +7,7 @@ import (
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/DeLucca990/homelab-mcp/internal/services"
+	"github.com/DeLucca990/nautilus/internal/services"
 )
 
 // SYSTEMD SERVICES TOOL

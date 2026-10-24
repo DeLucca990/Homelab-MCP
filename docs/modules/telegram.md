@@ -71,8 +71,8 @@ ANTHROPIC_API_KEY=sk-ant-...        # optional: without it, commands only
 | `TELEGRAM_ALLOWED_USER_IDS` | — | **required**, numeric ids, comma-separated |
 | `TELEGRAM_ADMIN_USER_IDS` | — | the users who may also remove, stop, restart and reconfigure — see [Admins](#admins) |
 | `TELEGRAM_ALLOWED_CHAT_IDS` | — | groups to answer in, besides private chats — negative ids, comma-separated |
-| `HOMELAB_MCP_URL` | `http://$HOMELAB_MCP_HTTP_ADDR/mcp` | set it when the server sits behind `tailscale serve` or on another host |
-| `HOMELAB_MCP_HTTP_TOKEN` | — | **required**, the server's own token |
+| `NAUTILUS_URL` | `http://$NAUTILUS_HTTP_ADDR/mcp` | set it when the server sits behind `tailscale serve` or on another host |
+| `NAUTILUS_HTTP_TOKEN` | — | **required**, the server's own token |
 | `ANTHROPIC_API_KEY` | — | turns on natural language (`ANTHROPIC_AUTH_TOKEN` also works) |
 | `TELEGRAM_MODEL` | `claude-sonnet-5-5` | `claude-opus-5-5` costs twice as much |
 | `TELEGRAM_EFFORT` | `medium` | `low`, `medium`, `high` or `xhigh` |
@@ -144,7 +144,7 @@ it. In a group it goes by each message's sender.
 Every problem in the configuration is reported at once, on startup:
 
 ```
-[homelab-telegram] configuration:
+[nautilus-bot] configuration:
   - TELEGRAM_ALLOWED_USER_IDS is not set: list the numeric Telegram user ids ...
   - TELEGRAM_EFFORT="huge": must be one of low, medium, high, xhigh
 ```
@@ -152,10 +152,10 @@ Every problem in the configuration is reported at once, on startup:
 ### 3. systemd
 
 ```ini
-# /etc/systemd/system/homelab-telegram-bot.service
+# /etc/systemd/system/nautilus-bot.service
 [Unit]
-Description=Homelab MCP Telegram bot
-After=network-online.target homelab-mcp.service
+Description=Nautilus Telegram bot
+After=network-online.target nautilus-mcp.service
 Wants=network-online.target
 
 [Service]
@@ -163,7 +163,7 @@ ExecStart=/home/ubuntu/repos/Homelab-MCP/bin/telegram-bot
 User=ubuntu
 Restart=always
 RestartSec=5
-StateDirectory=homelab-telegram-bot
+StateDirectory=nautilus-bot
 
 [Install]
 WantedBy=multi-user.target
@@ -171,20 +171,29 @@ WantedBy=multi-user.target
 
 ```sh
 make build
-sudo systemctl daemon-reload && sudo systemctl enable --now homelab-telegram-bot
-journalctl -u homelab-telegram-bot -f
-# [homelab-telegram] telegram bot running for 1 user(s), 1 of them admin, MCP at http://100.101.102.103:3000/mcp: commands and natural language with claude-sonnet-5-5, effort medium
+sudo systemctl daemon-reload && sudo systemctl enable --now nautilus-bot
+journalctl -u nautilus-bot -f
+# [nautilus-bot] telegram bot running for 1 user(s), 1 of them admin, MCP at http://100.101.102.103:3000/mcp: commands and natural language with claude-sonnet-5-5, effort medium
 ```
 
 The `User=` needs no `docker` group: the bot touches nothing on the host. To
-update, `make deploy-bot`. `StateDirectory=` gives it
-`/var/lib/homelab-telegram-bot`, owned by that user, for the
+update, `make build && sudo systemctl restart nautilus-bot`. `StateDirectory=` gives it
+`/var/lib/nautilus-bot`, owned by that user, for the
 [daily digest](#the-daily-digest)'s file and the [spending
 ledger](#spending-cost-and-the-daily-budget).
 
 It needs no inbound port. Long polling only opens connections outwards, to
 `api.telegram.org` and `api.anthropic.com`, so it works on a host that is
 reachable only on the tailnet.
+
+### Or in Docker
+
+`compose.yml` runs it beside the server, from the same image and the same
+`.env` ([INSTALL.md](../INSTALL.md)). The image sets `STATE_DIRECTORY=/data`, the
+variable systemd's `StateDirectory=` sets, so the digest's file and the
+ledger land in the `nautilus-bot-data` volume with no other setting.
+Its healthcheck asks Telegram who the bot is every 30 seconds; the MCP server
+being down does not make the bot unhealthy.
 
 ---
 
@@ -194,7 +203,7 @@ reachable only on the tailnet.
 
 | Command | Tool |
 | --- | --- |
-| `/status` | `homelab_overview` |
+| `/status` | `nautilus_overview` |
 | `/disk` | `system_disk_usage` |
 | `/memory` | `system_memory_stats` |
 | `/docker` | `docker_container_status` |
@@ -226,7 +235,7 @@ words: `/restart` is refused, before the server is asked, for anyone not in
 it would to Claude. Both are logged the same way: `user 11111111 →
 docker_container_restart`, or `… refused: admin only`. And it exists only
 where the server registered `docker_container_restart`, which takes
-`HOMELAB_MCP_ALLOW_CONTAINER_NAMES`.
+`NAUTILUS_ALLOW_CONTAINER_NAMES`.
 
 ### Plain words
 
@@ -238,9 +247,9 @@ plus the server's own [procedures](../tools/PROMPTS.md): `triage`, and
 order to diagnose in. They are fetched once per process.
 
 - **Resources** — the server's tool descriptions point at its
-  [resources](../tools/RESOURCES.md) by URI (*"homelab://bazarr/language-profiles
+  [resources](../tools/RESOURCES.md) by URI (*"nautilus://bazarr/language-profiles
   lists them"*), and the Messages API has no resources. So the bot adds one tool
-  of its own, `homelab_resource_read`, whose description lists every resource
+  of its own, `nautilus_resource_read`, whose description lists every resource
   the server registered and which reads one through `resources/read`. It changes
   nothing, so it asks nothing.
 - **Only text reaches Claude.** Of a tool it gets the description and the input
@@ -258,7 +267,7 @@ order to diagnose in. They are fetched once per process.
   still running — usually waiting on an approval — is answered with "still on
   the previous one" rather than queued.
 - **Caching** covers tools, system prompt and history. The tool list is sorted
-  by name, with `homelab_resource_read` last, so it is the same bytes on every
+  by name, with `nautilus_resource_read` last, so it is the same bytes on every
   request.
 - **Refusals**: requests carry `fallbacks: "default"` (beta
   `server-side-fallback-2026-07-01`), so one a safety classifier declines is
@@ -301,7 +310,7 @@ added to the last line only when they apply: `— answered by claude-opus-4-8`
 when a fallback model answered instead of `TELEGRAM_MODEL`, and `— no price
 for …, not included` for a model the price table does not know. A failed
 question is logged too (`failed in 3 steps`): every step before the failure
-was billed. `journalctl -u homelab-telegram-bot | grep '\$'` is the ledger.
+was billed. `journalctl -u nautilus-bot | grep '\$'` is the ledger.
 
 The dollars are an **estimate** from list prices (`prices` in
 `internal/telegram/cost.go`, dated in the code), not the bill: cache writes at
@@ -396,7 +405,7 @@ O disco de mídia está em 90% e enche em cerca de 10 dias; o sonarr reiniciou p
 ```
 
 **The facts come from a template, the headline from a model.** The bot calls
-the server's [`homelab_daily_digest`](../tools/README.md#homelab_daily_digest),
+the server's [`nautilus_daily_digest`](../tools/README.md#nautilus_daily_digest),
 reads its JSON and writes the message itself, in Portuguese, leaving out every
 empty section. Only then is `TELEGRAM_DIGEST_MODEL` — Haiku, at effort `low` —
 shown that text and asked for the line in italics at the top: what matters
@@ -424,9 +433,9 @@ to a JSON file, keeping the last 30, and the next digest reads them back:
   for a filesystem that would take more than 90 days.
 
 The file is `TELEGRAM_DIGEST_STATE_PATH` if set, otherwise `digest.json` in
-systemd's `StateDirectory=` (`/var/lib/homelab-telegram-bot`, with the unit
-above), then `$XDG_STATE_HOME/homelab-telegram-bot/`, then
-`~/.local/state/homelab-telegram-bot/`. It is written whole and renamed into
+systemd's `StateDirectory=` (`/var/lib/nautilus-bot`, with the unit
+above), then `$XDG_STATE_HOME/nautilus-bot/`, then
+`~/.local/state/nautilus-bot/`. It is written whole and renamed into
 place, so a crash mid-write leaves yesterday's.
 
 **When.** The schedule lives in the bot, not in a timer: one variable, and
@@ -531,15 +540,15 @@ through Telegram, from anywhere.
 | No reply to an @mention in a group, but commands work | Privacy mode is on: `/setprivacy` → Disable, then remove and re-add the bot |
 | A friend's button press does nothing | Only the person whose request raised an approval can answer it |
 | Claude says an action needs an admin | The sender is not in `TELEGRAM_ADMIN_USER_IDS` |
-| `connecting to the MCP server … 401` | `HOMELAB_MCP_HTTP_TOKEN` differs from the server's |
-| `connecting to the MCP server … connection refused` | The server is down, or bound to `127.0.0.1` behind `tailscale serve` — set `HOMELAB_MCP_URL` to the address that serves it |
+| `connecting to the MCP server … 401` | `NAUTILUS_HTTP_TOKEN` differs from the server's |
+| `connecting to the MCP server … connection refused` | The server is down, or bound to `127.0.0.1` behind `tailscale serve` — set `NAUTILUS_URL` to the address that serves it |
 | "Linguagem natural está desligada" | No `ANTHROPIC_API_KEY` in the bot's environment |
 | An approval shows "Expirou sem resposta" | Nobody pressed within `TELEGRAM_APPROVAL_TIMEOUT`; nothing was done |
 | "Ainda estou no pedido anterior" | The previous question is still running, usually waiting on an approval further up the chat |
 | "O teto diário de US$ … já foi gasto" | Today's model responses reached `TELEGRAM_DAILY_BUDGET_USD`. Commands still work; natural language comes back at midnight, or sooner with a higher budget and a restart |
 | `/cost` forgot the past after a restart | The ledger could not be opened or written — the startup log says `keeping it in memory`. Check that the unit has `StateDirectory=` or that `TELEGRAM_LEDGER_PATH` is writable |
 | No digest at 17:00 | The startup log says why: `TELEGRAM_DIGEST_AT=off`, or nobody to send it to — no `TELEGRAM_ADMIN_USER_IDS` and no `TELEGRAM_DIGEST_CHAT_IDS`. A bot first started after the hour waits for the next day |
-| "o servidor não tem homelab_daily_digest" | The server is older than the bot: `make deploy` it too |
+| "o servidor não tem nautilus_daily_digest" | The server is older than the bot: update it too |
 | The digest never says "desde ontem" | No scheduled digest has been recorded yet, or the state file cannot be written — the log says `tomorrow's will not compare with today's` |
 
 Over HTTP, the go-sdk closes a client session on any error status — an

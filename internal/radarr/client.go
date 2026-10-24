@@ -20,7 +20,7 @@ const BaseURLEnv = "SERVER_URL"
 
 const APIKeyEnv = "RADARR_API_KEY"
 
-const ReadOnlyEnv = "HOMELAB_MCP_RADARR_READONLY"
+const ReadOnlyEnv = "NAUTILUS_RADARR_READONLY"
 
 // serviceName is how this client names its service in an error.
 const serviceName = "radarr"

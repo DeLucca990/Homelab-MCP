@@ -74,6 +74,36 @@ open indefinitely.
 
 ---
 
+## In a container
+
+Every collector here reads the machine it runs on, so in Docker the container
+is handed the host ([INSTALL.md](../INSTALL.md#what-the-server-is-given) has
+the mounts) and the code changes in one place only.
+
+**The kernel's counters are already the host's.** `/proc/stat`,
+`/proc/meminfo` and `/proc/uptime` are not namespaced, so CPU, memory and
+uptime need nothing. Sharing the host's pid namespace makes `/proc/1` the
+host's init, whose `mountinfo` gopsutil reads for the list of filesystems.
+
+**The mountpoints in that list are the host's paths**, which do not exist in
+the container. The host's root is mounted read-only at `HOST_ROOT`, and
+`onHost` stats each mountpoint under it — `/srv/media` at `/host/srv/media`.
+The variable is gopsutil's own convention, beside the `HOST_ETC` that points
+its `os-release` lookup at the host's. Unset, the path is used as it is, so
+nothing changes outside a container.
+
+**`systemctl` talks to the host's systemd over D-Bus.** As a user other than
+root it does not use systemd's private socket, only the system bus, and
+reading units there is open to everyone — it is how `systemctl status` works
+without `sudo`. It refuses to try at all unless `/run/systemd/system` exists,
+which is how it tells that systemd is running; both that directory and
+`/run/dbus` are mounted from the host. Without them, it answers *"System has
+not been booted with systemd"*, and that is read as `ErrUnavailable` — the
+same as no `systemctl` at all — so the overview reports services as absent
+rather than failing on every call.
+
+---
+
 ## The crash loop
 
 A service restarting every few seconds is `active` at almost any instant you look

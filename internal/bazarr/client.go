@@ -19,7 +19,7 @@ const BaseURLEnv = "SERVER_URL"
 
 const APIKeyEnv = "BAZARR_API_KEY"
 
-const ReadOnlyEnv = "HOMELAB_MCP_BAZARR_READONLY"
+const ReadOnlyEnv = "NAUTILUS_BAZARR_READONLY"
 
 const (
 	defaultPort = "6767"

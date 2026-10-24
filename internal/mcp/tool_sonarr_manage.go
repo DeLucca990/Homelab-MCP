@@ -8,7 +8,7 @@ import (
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/DeLucca990/homelab-mcp/internal/sonarr"
+	"github.com/DeLucca990/nautilus/internal/sonarr"
 )
 
 // SONARR RELEASES, IMPORT, EDIT, EPISODE MONITOR, HISTORY AND CALENDAR TOOLS
@@ -203,7 +203,7 @@ func handleSonarrImport(
 type sonarrEditInput struct {
 	SeriesID       int      `json:"series_id" jsonschema:"the series, from sonarr_library_status"`
 	Monitored      *bool    `json:"monitored,omitempty" jsonschema:"false makes Sonarr ignore the whole series; the files stay"`
-	QualityProfile string   `json:"quality_profile,omitempty" jsonschema:"by name — homelab://sonarr/quality-profiles lists them"`
+	QualityProfile string   `json:"quality_profile,omitempty" jsonschema:"by name — nautilus://sonarr/quality-profiles lists them"`
 	SeriesType     string   `json:"series_type,omitempty" jsonschema:"standard, daily or anime — how release names are numbered"`
 	AddTags        []string `json:"add_tags,omitempty" jsonschema:"existing Sonarr tags, by label"`
 	RemoveTags     []string `json:"remove_tags,omitempty"`

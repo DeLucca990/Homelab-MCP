@@ -6,11 +6,11 @@ import (
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/DeLucca990/homelab-mcp/internal/bazarr"
-	"github.com/DeLucca990/homelab-mcp/internal/jellyfin"
-	"github.com/DeLucca990/homelab-mcp/internal/prowlarr"
-	"github.com/DeLucca990/homelab-mcp/internal/radarr"
-	"github.com/DeLucca990/homelab-mcp/internal/sonarr"
+	"github.com/DeLucca990/nautilus/internal/bazarr"
+	"github.com/DeLucca990/nautilus/internal/jellyfin"
+	"github.com/DeLucca990/nautilus/internal/prowlarr"
+	"github.com/DeLucca990/nautilus/internal/radarr"
+	"github.com/DeLucca990/nautilus/internal/sonarr"
 )
 
 // Prompts are the procedures, where tools are the facts.
@@ -64,7 +64,7 @@ func handleTriagePrompt(ctx context.Context, req *sdk.GetPromptRequest) (*sdk.Ge
 		b.WriteString("Check my home server and tell me what, if anything, needs attention.\n\n")
 	}
 
-	b.WriteString(`Start with homelab_overview: one call, every area at once, and on a healthy
+	b.WriteString(`Start with nautilus_overview: one call, every area at once, and on a healthy
 server it is the entire answer. Go down into an area only where it flags one,
 using the tool it names.
 
@@ -197,7 +197,7 @@ two are indistinguishable from the outside:
 
    If the library already says downloaded and it still cannot be watched, the
    problem is on the Jellyfin side: jellyfin_find_item says whether Jellyfin
-   has it at all, and homelab://jellyfin/libraries whether the folder it was
+   has it at all, and nautilus://jellyfin/libraries whether the folder it was
    imported to is one Jellyfin reads. A scan (jellyfin_library_scan) fixes the
    first; only a path change fixes the second.`)
 	}
