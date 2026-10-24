@@ -47,8 +47,8 @@ To update: `git pull && make up`.
 
 ## From Docker Hub
 
-No source needed: the `.env` above, and a `compose.yml` beside it — on its own, or these two
-services added to a compose you already have:
+No source needed: the `.env` above, an empty `data` folder beside it (`mkdir data`) and a
+`compose.yml` — on its own, or these two services added to a compose you already have:
 
 ```yaml
 services:
@@ -81,15 +81,12 @@ services:
       start_period: 1m
     env_file: .env
     network_mode: host
+    user: "1000:1000"
     volumes:
-      - nautilus-bot-data:/data
+      - ./data:/data
     read_only: true
     tmpfs: [/tmp]
     restart: unless-stopped
-
-volumes:
-  nautilus-bot-data:
-    name: nautilus-bot-data
 ```
 
 ```sh
@@ -125,15 +122,38 @@ until `NAUTILUS_ALLOW_CONTAINER_NAMES` names something, and why the bearer token
 optional.
 
 The bot is given none of this: the network, to reach the server at `NAUTILUS_HTTP_ADDR`
-whichever interface that is, and a volume.
+whichever interface that is, and the `data` folder.
 
 ## The bot's files
 
 The digest's totals (`digest.json`) and the [spending ledger](modules/telegram.md#spending-cost-and-the-daily-budget)
-(`spend.jsonl`) are kept in the `nautilus-bot-data` volume, at `/data` — the image sets
-`STATE_DIRECTORY=/data`, which is where the bot looks for its directory under systemd too. A
-volume rather than a folder because the image runs as 65532 and ships `/data` owned by it, so
-nothing on the host needs `chown`ing.
+(`spend.jsonl`) are kept in `data/`, beside the `compose.yml`, mounted at `/data` — the image sets
+`STATE_DIRECTORY=/data`, which is where the bot looks for its directory under systemd too. They
+are plain files: `cat data/spend.jsonl` reads one, `scp` copies them off, and a backup of the
+folder the compose is in takes them along.
+
+`user:` makes the bot the folder's owner — `id -u` and `id -g`, 1000 for Ubuntu's first user — so
+the files it writes are yours. Create the folder before the first start (`make up` does): one
+that Docker creates belongs to root, and the bot will not start in a folder it cannot write,
+rather than run and forget the day's spending on every restart:
+
+```
+[nautilus-bot] the bot's files go in /data, which it cannot write: open /data/.write-check-…: permission denied — …
+```
+
+Installed when these files were kept in a volume, `nautilus-bot-data`, they move to the folder
+with the bot stopped:
+
+```sh
+docker compose stop nautilus-bot
+mkdir -p data
+docker run --rm -v nautilus-bot-data:/from:ro -v "$PWD/data":/to alpine \
+  sh -c "cp -a /from/. /to/ && chown -R $(id -u):$(id -g) /to"
+```
+
+Then the bot's two new lines in `compose.yml` — `user:` and `./data:/data` in place of the
+volume — the `volumes:` block at the end removed, and `docker compose up -d`. Once `/cost`
+remembers what it did, `docker volume rm nautilus-bot-data`.
 
 ## Health
 
@@ -156,13 +176,12 @@ has brought its address up.
 
 The units and the containers cannot run side by side: two servers on one address fail with
 `address already in use`, two bots on one token with `409 Conflict`. Stop the units, bring the
-bot's files into the volume, and start:
+bot's files into the folder, and start:
 
 ```sh
 sudo systemctl disable --now nautilus-bot nautilus-mcp
-docker compose create
-docker run --rm -v nautilus-bot-data:/data -v /var/lib/nautilus-bot:/from:ro alpine \
-  sh -c 'cp -a /from/. /data/ && chown -R 65532:65532 /data'
+mkdir -p data
+sudo cp -a /var/lib/nautilus-bot/. data/ && sudo chown -R "$(id -u):$(id -g)" data
 docker compose up -d
 ```
 
@@ -186,4 +205,5 @@ sed -i 's/^HOMELAB_MCP_/NAUTILUS_/' .env
 | `listening on …: bind: can't assign requested address` | `NAUTILUS_HTTP_ADDR` is not one of this host's addresses — or, right after a reboot, not yet: it retries |
 | `path / is mounted on / but it is not a shared or slave mount` | a host whose `/` is not shared (systemd's default is shared): drop `,rslave` |
 | a disk row saying *permission denied* | `user:` cannot reach that mountpoint: make it the owner's `id -u`:`id -g` |
+| `the bot's files go in /data, which it cannot write` | `data/` is not the bot's `user:` — Docker created it, as root, because it was missing: `sudo chown -R 1000:1000 data` |
 | `telegram: … 409 Conflict` | another process polls the same bot token — the systemd unit, or another install |

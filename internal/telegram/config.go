@@ -262,6 +262,18 @@ func stateDir() (string, error) {
 	return filepath.Join(home, ".local", "state", "nautilus-bot"), nil
 }
 
+func writableDir(dir string) error {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	f, err := os.CreateTemp(dir, ".write-check-*")
+	if err != nil {
+		return err
+	}
+	f.Close()
+	return os.Remove(f.Name())
+}
+
 func (c Config) IsAdmin(userID int64) bool { return c.AdminUsers[userID] }
 
 func parseUserIDs(raw string) (map[int64]bool, error) {

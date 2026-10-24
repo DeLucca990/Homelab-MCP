@@ -24,6 +24,7 @@ inspect-open:
 	npx $(INSPECTOR)
 
 up:
+	mkdir -p data
 	docker compose up -d --build
 
 down:

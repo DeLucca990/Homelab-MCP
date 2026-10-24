@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -27,6 +28,13 @@ type Bot struct {
 }
 
 func New(cfg Config) (*Bot, error) {
+	for _, dir := range []string{filepath.Dir(cfg.DigestStatePath), filepath.Dir(cfg.LedgerPath)} {
+		if err := writableDir(dir); err != nil {
+			return nil, fmt.Errorf("the bot's files go in %s, which it cannot write: %w — in Docker, "+
+				"the folder mounted there must belong to the user the service runs as", dir, err)
+		}
+	}
+
 	b := &Bot{cfg: cfg, approvals: NewApprovals(cfg.ApprovalTimeout)}
 	b.mcp = NewMCP(cfg.MCPURL, cfg.MCPToken, b.approvals.Elicit)
 	if cfg.LLM {
@@ -315,7 +323,6 @@ func (b *Bot) sendOutput(ctx context.Context, chatID int64, tool, text string) {
 	}
 }
 
-// If Telegram still rejects the markup, resend without it.
 func (b *Bot) sendReply(ctx context.Context, chatID int64, text string) {
 	for _, c := range chunkHTML(parseHTML(text), chunkBudget) {
 		if err := b.send(ctx, chatID, c, models.ParseModeHTML); err != nil {

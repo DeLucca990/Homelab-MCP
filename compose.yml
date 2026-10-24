@@ -32,14 +32,11 @@ services:
       start_period: 1m
     env_file: .env
     network_mode: host
+    user: "1000:1000"
     volumes:
-      - nautilus-bot-data:/data
+      - ./data:/data
     read_only: true
     tmpfs:
       - /tmp
     depends_on: [nautilus-mcp]
     restart: unless-stopped
-
-volumes:
-  nautilus-bot-data:
-    name: nautilus-bot-data

@@ -80,6 +80,27 @@ func TestLedgerFileThatDoesNotExistYet(t *testing.T) {
 	}
 }
 
+func TestStateDirMustBeWritable(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "state")
+	if err := writableDir(dir); err != nil {
+		t.Fatalf("a directory that does not exist yet should be made: %v", err)
+	}
+	if entries, _ := os.ReadDir(dir); len(entries) != 0 {
+		t.Errorf("the check left %d file(s) behind", len(entries))
+	}
+
+	if os.Geteuid() == 0 {
+		t.Skip("root writes anywhere")
+	}
+	if err := os.Chmod(dir, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(dir, 0o700) })
+	if writableDir(dir) == nil {
+		t.Error("a directory the bot cannot write in passed the check")
+	}
+}
+
 func TestCostReport(t *testing.T) {
 	now := time.Date(2026, 10, 19, 12, 0, 0, 0, time.Local)
 	l := &Ledger{}

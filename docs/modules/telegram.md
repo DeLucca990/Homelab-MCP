@@ -191,7 +191,7 @@ reachable only on the tailnet.
 `compose.yml` runs it beside the server, from the same image and the same
 `.env` ([INSTALL.md](../INSTALL.md)). The image sets `STATE_DIRECTORY=/data`, the
 variable systemd's `StateDirectory=` sets, so the digest's file and the
-ledger land in the `nautilus-bot-data` volume with no other setting.
+ledger land in the `data` folder beside `compose.yml` with no other setting.
 Its healthcheck asks Telegram who the bot is every 30 seconds; the MCP server
 being down does not make the bot unhealthy.
 
@@ -331,9 +331,11 @@ in which chat, the models, the tokens by kind and the estimated dollars. By
 default it is `spend.jsonl` beside the digest's file, in `StateDirectory=` with
 the unit above. It is appended to, never rewritten while the bot runs; on
 startup, lines older than 90 days are dropped, along with any line it cannot
-read (the log counts those). A file that cannot be written is logged and the
-bot goes on with the ledger in memory — the budget still holds until the next
-restart, which forgets what that day had cost.
+read (the log counts those). The bot does not start in a directory it cannot
+write, since that would forget each day's spending on every restart. A file
+that fails later is logged and the bot goes on with the ledger in memory — the
+budget still holds until the next restart, which forgets what that day had
+cost.
 
 `/cost` reads it:
 
@@ -546,6 +548,7 @@ through Telegram, from anywhere.
 | An approval shows "Expirou sem resposta" | Nobody pressed within `TELEGRAM_APPROVAL_TIMEOUT`; nothing was done |
 | "Ainda estou no pedido anterior" | The previous question is still running, usually waiting on an approval further up the chat |
 | "O teto diário de US$ … já foi gasto" | Today's model responses reached `TELEGRAM_DAILY_BUDGET_USD`. Commands still work; natural language comes back at midnight, or sooner with a higher budget and a restart |
+| `the bot's files go in …, which it cannot write` | The bot's directory belongs to someone else. Under systemd, the unit needs `StateDirectory=`; in Docker, `data/` must belong to the service's `user:` |
 | `/cost` forgot the past after a restart | The ledger could not be opened or written — the startup log says `keeping it in memory`. Check that the unit has `StateDirectory=` or that `TELEGRAM_LEDGER_PATH` is writable |
 | No digest at 17:00 | The startup log says why: `TELEGRAM_DIGEST_AT=off`, or nobody to send it to — no `TELEGRAM_ADMIN_USER_IDS` and no `TELEGRAM_DIGEST_CHAT_IDS`. A bot first started after the hour waits for the next day |
 | "o servidor não tem nautilus_daily_digest" | The server is older than the bot: update it too |

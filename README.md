@@ -24,6 +24,7 @@ You need a Linux server with systemd and Docker. For the bot, a bot of your own 
 for questions in plain words, an Anthropic API key from [platform.claude.com](https://platform.claude.com).
 
 ```sh
+mkdir -p data   # the bot's files
 curl -fsSL -o .env https://raw.githubusercontent.com/DeLucca990/Homelab-MCP/main/.env.example
 chmod 600 .env   # NAUTILUS_HTTP_ADDR, NAUTILUS_HTTP_TOKEN, DOCKER_GID, the API keys, the bot's
 ```
@@ -61,15 +62,12 @@ services:
       start_period: 1m
     env_file: .env
     network_mode: host
+    user: "1000:1000"
     volumes:
-      - nautilus-bot-data:/data
+      - ./data:/data
     read_only: true
     tmpfs: [/tmp]
     restart: unless-stopped
-
-volumes:
-  nautilus-bot-data:
-    name: nautilus-bot-data
 ```
 
 ```sh
@@ -78,8 +76,10 @@ docker compose pull && docker compose up -d   # update
 ```
 
 The server is handed the host — its network, processes, filesystems read-only, the Docker socket
-and the system bus — so it answers about the machine, not the container. What each line is for,
-and moving from systemd: [docs/INSTALL.md](docs/INSTALL.md).
+and the system bus — so it answers about the machine, not the container. The bot keeps its files
+— the digest's history and what Claude has cost — in `data/`, as the folder's owner: `user:` is
+`id -u`:`id -g`, 1000 for Ubuntu's first user. What each line is for, and moving from systemd:
+[docs/INSTALL.md](docs/INSTALL.md).
 
 ## Using it
 
